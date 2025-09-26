@@ -9,12 +9,32 @@ import SwiftUI
 
 @main
 struct SpatialAudioResearchARVRApp: App {
-    @StateObject private var appModel = AppModel()
+    @State private var appModel = AppModel()
+    @State private var objectRecognitionManager = ObjectRecognitionManager()
+    @State private var spatialAudioManager = SpatialAudioManager()
+    @State private var accessibilityManager = AccessibilityManager()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appModel)
+                .environment(appModel)
+                .environmentObject(objectRecognitionManager)
+                .environmentObject(spatialAudioManager)
+                .environmentObject(accessibilityManager)
+        }
+        
+        ImmersiveSpace(id: appModel.immersiveSpaceID) {
+            ImmersiveView()
+                .environment(appModel)
+                .environmentObject(objectRecognitionManager)
+                .environmentObject(spatialAudioManager)
+                .environmentObject(accessibilityManager)
+                .onAppear {
+                    appModel.immersiveSpaceState = .open
+                }
+                .onDisappear {
+                    appModel.immersiveSpaceState = .closed
+                }
         }
     }
 }
