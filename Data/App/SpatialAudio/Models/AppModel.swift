@@ -9,27 +9,17 @@ import Foundation
 import SwiftUI
 import Combine
 
-@Observable
-class AppModel {
-    var currentView: ViewState = .dashboard
-    var isARActive = false
-    var sessionStartTime: Date?
-    var currentSession: ResearchSession?
-    
-    var immersiveSpaceState: ImmersiveSpaceState = .closed
-    let immersiveSpaceID = "ImmersiveSpace"
+class AppModel: ObservableObject {
+    @Published var currentView: ViewState = .dashboard
+    @Published var isARActive = false
+    @Published var sessionStartTime: Date?
+    @Published var currentSession: ResearchSession?
 
     enum ViewState {
         case dashboard
         case objectDetection
         case settings
         case statistics
-    }
-    
-    enum ImmersiveSpaceState {
-        case open
-        case closed
-        case inTransition
     }
 
     func startNewSession() {
@@ -42,4 +32,10 @@ class AppModel {
         currentSession?.endTime = Date()
         isARActive = false
     }
+}
+
+struct ResearchSession: Identifiable {
+    let id = UUID()
+    let startTime = Date()
+    var endTime: Date?
 }

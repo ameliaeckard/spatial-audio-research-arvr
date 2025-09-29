@@ -31,6 +31,7 @@ class SpatialAudioManager: ObservableObject {
         case beep = "Beep"
     }
     
+    // Audio feedback settings for different object types
     private let objectAudioSettings: [ObjectType: AudioSettings] = [
         .chair: AudioSettings(frequency: 440.0, volume: 0.8, rolloffFactor: 1.0),
         .table: AudioSettings(frequency: 330.0, volume: 0.7, rolloffFactor: 1.2),
@@ -49,6 +50,7 @@ class SpatialAudioManager: ObservableObject {
     
     // MARK: - Audio System Setup
     private func setupAudioSystem() {
+        // Configure AVAudioSession for spatial audio
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, 
@@ -59,6 +61,7 @@ class SpatialAudioManager: ObservableObject {
             print("Failed to configure audio session: \(error)")
         }
         
+        // Configure speech synthesizer
         speechSynthesizer.delegate = self
     }
     
@@ -80,23 +83,28 @@ class SpatialAudioManager: ObservableObject {
     func createSpatialAudio(for object: DetectedObject) async {
         guard isAudioEnabled && spatialAudioEnabled else { return }
         
+        // Remove existing audio entity if it exists
         if let existingEntity = audioEntities[object.id] {
             realityViewContent.remove(existingEntity)
         }
         
+        // Create new audio entity
         let audioEntity = await createAudioEntity(for: object)
         audioEntities[object.id] = audioEntity
         realityViewContent.add(audioEntity)
         
+        // Position the audio entity
         updateAudioPosition(for: object)
     }
     
     private func createAudioEntity(for object: DetectedObject) async -> Entity {
         let audioEntity = Entity()
         
+        // Get audio settings for this object type
         let settings = objectAudioSettings[object.type] ?? 
                       AudioSettings(frequency: 350.0, volume: 0.7, rolloffFactor: 1.0)
         
+        // Configure spatial audio component
         var spatialAudioComponent = SpatialAudioComponent()
         spatialAudioComponent.gain = settings.volume * masterVolume
         spatialAudioComponent.distanceAttenuation = .rolloff(factor: settings.rolloffFactor)
@@ -104,6 +112,7 @@ class SpatialAudioManager: ObservableObject {
         
         audioEntity.components[SpatialAudioComponent.self] = spatialAudioComponent
         
+        // Load and play appropriate audio
         do {
             let audioResource = try await loadAudioResource(for: object, settings: settings)
             audioEntity.playAudio(audioResource)
@@ -119,13 +128,17 @@ class SpatialAudioManager: ObservableObject {
         
         switch selectedToneType {
         case .pureTone:
+            // Generate pure tone based on object type
             return try await generatePureTone(frequency: settings.frequency, configuration: configuration)
         case .musicalNote:
+            // Use musical note corresponding to frequency
             return try await loadMusicalNote(frequency: settings.frequency, configuration: configuration)
         case .natureSound:
+            // Map objects to nature sounds
             let soundName = mapObjectToNatureSound(object.type)
             return try AudioFileResource.load(named: soundName, configuration: configuration)
         case .beep:
+            // Use different beep patterns for different objects
             let beepPattern = mapObjectToBeepPattern(object.type)
             return try AudioFileResource.load(named: beepPattern, configuration: configuration)
         }
@@ -133,6 +146,8 @@ class SpatialAudioManager: ObservableObject {
     
     // MARK: - Audio Generation
     private func generatePureTone(frequency: Float, configuration: AudioFileResource.Configuration) async throws -> AudioFileResource {
+        // In a real implementation, this would generate actual pure tones
+        // For now, we'll use placeholder audio files
         return try AudioFileResource.load(named: "pure_tone_\(Int(frequency))", configuration: configuration)
     }
     
@@ -164,6 +179,7 @@ class SpatialAudioManager: ObservableObject {
     }
     
     private func frequencyToNoteName(_ frequency: Float) -> String {
+        // Convert frequency to musical note name
         let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
         let a4Frequency: Float = 440.0
         let semitone = pow(2.0, 1.0/12.0)
@@ -179,6 +195,7 @@ class SpatialAudioManager: ObservableObject {
     func updateAudioPosition(for object: DetectedObject) {
         guard let audioEntity = audioEntities[object.id] else { return }
         
+        // Convert object position to RealityKit transform
         let transform = Transform(
             scale: SIMD3<Float>(1, 1, 1),
             rotation: object.orientation,
@@ -191,8 +208,10 @@ class SpatialAudioManager: ObservableObject {
     func removeAudioEntity(for objectId: UUID) {
         guard let audioEntity = audioEntities[objectId] else { return }
         
+        // Stop audio playback
         audioEntity.stopAllAudio()
         
+        // Remove from scene
         realityViewContent.remove(audioEntity)
         audioEntities.removeValue(forKey: objectId)
     }
@@ -248,6 +267,7 @@ class SpatialAudioManager: ObservableObject {
     }
     
     private func calculateDirection(for position: SIMD3<Float>) -> Float {
+        // Calculate angle from forward direction (-Z axis in RealityKit)
         return atan2(position.x, -position.z) * 180 / .pi
     }
     
@@ -263,6 +283,7 @@ class SpatialAudioManager: ObservableObject {
     func updateMasterVolume(_ volume: Float) {
         masterVolume = volume
         
+        // Update all existing audio entities
         for (_, audioEntity) in audioEntities {
             if var spatialAudio = audioEntity.components[SpatialAudioComponent.self] {
                 spatialAudio.gain = volume
@@ -275,6 +296,7 @@ class SpatialAudioManager: ObservableObject {
         spatialAudioEnabled.toggle()
         
         if !spatialAudioEnabled {
+            // Remove all spatial audio entities
             for (objectId, _) in audioEntities {
                 removeAudioEntity(for: objectId)
             }
@@ -284,12 +306,14 @@ class SpatialAudioManager: ObservableObject {
     func setToneType(_ toneType: AudioToneType) {
         selectedToneType = toneType
         
+        // Recreate all audio entities with new tone type
         Task {
             let currentObjects = Array(audioEntities.keys)
             for objectId in currentObjects {
                 removeAudioEntity(for: objectId)
             }
             
+            // This would typically trigger recreation through object detection updates
         }
     }
 }
@@ -304,8 +328,10 @@ struct AudioSettings {
 // MARK: - AVSpeechSynthesizerDelegate
 extension SpatialAudioManager: AVSpeechSynthesizerDelegate {
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        // Could add audio ducking here if needed
     }
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        // Could restore audio levels here if ducking was implemented
     }
 }
