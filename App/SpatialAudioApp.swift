@@ -4,7 +4,8 @@ import SwiftUI
 struct SpatialAudioApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainMenuView()
         }
+        .windowStyle(.plain)
     }
 }
