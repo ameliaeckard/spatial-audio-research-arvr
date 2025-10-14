@@ -37,9 +37,8 @@ How do spatial audio cues using the Apple Vision Pro affect real-world object re
 ## Contact Information
 
 **Principal Investigator:** [Name]  
-**Institution:** [Institution]  
-**Email:** [Email]  
-**Phone:** [Phone]  
+**Institution:** University of North Carolina at Charlotte  
+**Email:** [Email]
 **IRB Protocol #:** [Number]
 
 ---
@@ -48,7 +47,7 @@ How do spatial audio cues using the Apple Vision Pro affect real-world object re
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
-| 1.0 | Oct 13, 2025 | Initial protocol | Research Team |
+| 1.0 | Oct 13, 2025 | Refactor | Amelia Eckard |
 
 ---
 
