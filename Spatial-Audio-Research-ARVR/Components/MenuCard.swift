@@ -1,7 +1,9 @@
 //
 //  MenuCard.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 10/21/25.
 //
+//  Component for the main menu of the app. Used in the main menu view.
 //
 
 import SwiftUI

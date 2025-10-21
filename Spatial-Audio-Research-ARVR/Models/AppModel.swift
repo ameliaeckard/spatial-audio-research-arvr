@@ -1,7 +1,9 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Merged by Amelia Eckard on 10/21/25.
+//  Updated by Amelia Eckard on 10/21/25.
+//
+//  Handles the app's model data and state using Swift's Observable feature.
 //
 
 import ARKit
@@ -13,6 +15,7 @@ import SwiftUI
 class AppModel {
     // MARK: - Enums
     
+    //Tracks whether or not the AI view is open or closed. Safety net to reset state when closed.
     enum ImmersiveSpaceState {
         case closed
         case inTransition
@@ -23,7 +26,8 @@ class AppModel {
         case mug = "Mug"
         case waterBottle = "Water Bottle"
         case chair = "Chair"
-        
+        // Three objects for detection; each have icon in live detection menu.
+
         var icon: String {
             switch self {
             case .mug: return "cup.and.saucer.fill"
@@ -57,6 +61,7 @@ class AppModel {
     var objectVisualizations: [UUID: ObjectAnchorVisualization] = [:]
     var providersStoppedWithError = false
     var detectedObjects: [DetectionObject: Bool] = [:]
+    // Object detection (ex: detectedObjects[.mug]) is true, object is currently detected.)
     
     // MARK: - Authorization & Provider Status
     
@@ -134,7 +139,8 @@ class AppModel {
         
         worldSensingAuthorizationStatus = authorizationResult
     }
-    
+    //Asks user for camera access if not already granted. If it's granted, canEnterImmersiveSpace is true..
+
     // MARK: - Object Tracking
     
     func startTracking(with rootEntity: Entity) async {

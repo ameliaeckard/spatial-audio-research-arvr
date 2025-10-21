@@ -3,6 +3,8 @@
 //  Spatial-Audio-Research-ARVR
 //  Updated by Amelia Eckard on 10/21/25.
 //
+//  Component representing an interactive bubble for a reference object in the UI.
+//
 
 import SwiftUI
 

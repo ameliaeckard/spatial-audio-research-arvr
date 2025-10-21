@@ -3,7 +3,10 @@
 //  Spatial-Audio-Research-ARVR
 //  Updated by Amelia Eckard on 10/21/25.
 //
+//  Loads .referenceobject files from bundle and their associated USDZ models.
+//
 
+import Foundation
 import ARKit
 import RealityKit
 

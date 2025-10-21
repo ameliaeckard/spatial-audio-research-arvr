@@ -3,6 +3,8 @@
 //  Spatial-Audio-Research-ARVR
 //  Updated by Amelia Eckard on 10/21/25.
 //
+//  Contains extensions for ARKit and RealityKit types.
+//
 
 import ARKit
 import RealityKit

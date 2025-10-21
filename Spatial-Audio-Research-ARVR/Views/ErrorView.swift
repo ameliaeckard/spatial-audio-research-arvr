@@ -3,6 +3,8 @@
 //  Spatial-Audio-Research-ARVR
 //  Updated by Amelia Eckard on 10/21/25.
 //
+//  View to display error messages related to ARKit support and permissions.
+//
 
 import SwiftUI
 

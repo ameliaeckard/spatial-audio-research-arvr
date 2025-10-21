@@ -3,6 +3,8 @@
 //  Spatial-Audio-Research-ARVR
 //  Updated by Amelia Eckard on 10/21/25.
 //
+//  Constants used in the app.
+//
 
 import Foundation
 
