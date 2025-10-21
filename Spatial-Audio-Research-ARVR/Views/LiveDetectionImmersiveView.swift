@@ -1,7 +1,7 @@
 //
 //  LiveDetectionImmersiveView.swift
 //  Spatial-Audio-Research-ARVR
-//
+//  Updated by Amelia Eckard on 10/21/25.
 //
 
 import SwiftUI
@@ -10,12 +10,14 @@ import RealityKit
 struct LiveDetectionImmersiveView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
-    @State private var selectedObject: String? = nil
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(AppModel.self) private var appModel
+    
+    @State private var rootEntity = Entity()
     
     var body: some View {
         RealityView { content in
-            // This is where you'd add RealityKit content for AR object detection
-            // For now, we'll keep it minimal
+            content.add(rootEntity)
         }
         .overlay(alignment: .top) {
             // Header text floating in space
@@ -26,19 +28,49 @@ struct LiveDetectionImmersiveView: View {
                     .foregroundStyle(.white)
                     .shadow(radius: 4)
                 
-                if let object = selectedObject {
-                    Text("Detecting: \(object)")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .padding()
-                        .background(.white.opacity(0.9))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(radius: 4)
+                if let object = appModel.selectedObject {
+                    HStack(spacing: 8) {
+                        Text("Detecting:")
+                            .font(.title2)
+                        
+                        Text(object.rawValue)
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(object.color)
+                        
+                        // Show detection status
+                        if appModel.detectedObjects[object] == true {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.title2)
+                        }
+                    }
+                    .padding()
+                    .background(.white.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(radius: 4)
                 } else {
                     Text("Select an object to detect")
                         .font(.title3)
                         .foregroundStyle(.white)
                         .shadow(radius: 4)
+                }
+                
+                // Show tracking status
+                if appModel.isReadyToRun {
+                    Text("Tracking Active")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .padding(8)
+                        .background(.white.opacity(0.8))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Text("Initializing...")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(8)
+                        .background(.white.opacity(0.8))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
             .padding(.top, 100)
@@ -46,31 +78,20 @@ struct LiveDetectionImmersiveView: View {
         .overlay(alignment: .bottom) {
             // Floating bubbles at bottom of view
             HStack(spacing: 30) {
-                ObjectBubble(
-                    objectName: "Mug",
-                    icon: "cup.and.saucer.fill",
-                    color: .brown,
-                    isSelected: selectedObject == "Mug"
-                ) {
-                    selectedObject = selectedObject == "Mug" ? nil : "Mug"
-                }
-                
-                ObjectBubble(
-                    objectName: "Water Bottle",
-                    icon: "waterbottle.fill",
-                    color: .blue,
-                    isSelected: selectedObject == "Water Bottle"
-                ) {
-                    selectedObject = selectedObject == "Water Bottle" ? nil : "Water Bottle"
-                }
-                
-                ObjectBubble(
-                    objectName: "Chair",
-                    icon: "chair.fill",
-                    color: .orange,
-                    isSelected: selectedObject == "Chair"
-                ) {
-                    selectedObject = selectedObject == "Chair" ? nil : "Chair"
+                ForEach(AppModel.DetectionObject.allCases, id: \.self) { object in
+                    ObjectBubble(
+                        objectName: object.rawValue,
+                        icon: object.icon,
+                        color: object.color,
+                        isSelected: appModel.selectedObject == object,
+                        isDetected: appModel.detectedObjects[object] == true
+                    ) {
+                        if appModel.selectedObject == object {
+                            appModel.selectedObject = nil
+                        } else {
+                            appModel.selectedObject = object
+                        }
+                    }
                 }
             }
             .padding(.bottom, 100)
@@ -98,8 +119,37 @@ struct LiveDetectionImmersiveView: View {
             .padding(.top, 60)
             .padding(.leading, 60)
         }
-        .onAppear {
-            // Add any AR setup logic here
+        .task {
+            await appModel.startTracking(with: rootEntity)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task {
+                    await appModel.queryWorldSensingAuthorization()
+                }
+            } else {
+                if appModel.immersiveSpaceState == .open {
+                    Task {
+                        await dismissImmersiveSpace()
+                    }
+                }
+            }
+        }
+        .onChange(of: appModel.providersStoppedWithError) { _, providersStoppedWithError in
+            if providersStoppedWithError {
+                if appModel.immersiveSpaceState == .open {
+                    Task {
+                        await dismissImmersiveSpace()
+                    }
+                }
+                appModel.providersStoppedWithError = false
+            }
+        }
+        .onDisappear {
+            for (_, visualization) in appModel.objectVisualizations {
+                rootEntity.removeChild(visualization.entity)
+            }
+            appModel.objectVisualizations.removeAll()
         }
     }
 }

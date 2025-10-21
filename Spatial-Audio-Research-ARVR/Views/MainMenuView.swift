@@ -1,7 +1,7 @@
 //
 //  MainMenuView.swift
 //  Spatial-Audio-Research-ARVR
-//
+//  Updated by Amelia Eckard on 10/21/25.
 //
 
 import SwiftUI
@@ -10,6 +10,7 @@ struct MainMenuView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(AppModel.self) private var appModel
     
     var body: some View {
         VStack(spacing: 40) {
@@ -32,36 +33,40 @@ struct MainMenuView: View {
             
             Spacer()
             
-            VStack(spacing: 24) {
-                // Live Detection Button - Opens Immersive Space
-                Button {
-                    Task {
-                        dismissWindow(id: "main-menu")
-                        await openImmersiveSpace(id: "live-detection")
+            if appModel.canEnterImmersiveSpace {
+                VStack(spacing: 24) {
+                    // Live Detection Button - Opens Immersive Space
+                    Button {
+                        Task {
+                            dismissWindow(id: "main-menu")
+                            await openImmersiveSpace(id: "live-detection")
+                        }
+                    } label: {
+                        MenuCard(
+                            title: "Live Detection",
+                            subtitle: "Immersive object detection with spatial audio",
+                            icon: "eye.fill",
+                            color: .green
+                        )
                     }
-                } label: {
-                    MenuCard(
-                        title: "Live Detection",
-                        subtitle: "Immersive object detection with spatial audio",
-                        icon: "eye.fill",
-                        color: .green
-                    )
+                    .buttonStyle(.plain)
+                    
+                    // Research Testing Button - Opens Window
+                    Button {
+                        openWindow(id: "research-testing")
+                        dismissWindow(id: "main-menu")
+                    } label: {
+                        MenuCard(
+                            title: "Research Testing",
+                            subtitle: "Controlled scenarios for data collection",
+                            icon: "chart.bar.doc.horizontal.fill",
+                            color: .green
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                
-                // Research Testing Button - Opens Window
-                Button {
-                    openWindow(id: "research-testing")
-                    dismissWindow(id: "main-menu")
-                } label: {
-                    MenuCard(
-                        title: "Research Testing",
-                        subtitle: "Controlled scenarios for data collection",
-                        icon: "chart.bar.doc.horizontal.fill",
-                        color: .green
-                    )
-                }
-                .buttonStyle(.plain)
+            } else {
+                ErrorView()
             }
             
             Spacer()
@@ -83,5 +88,13 @@ struct MainMenuView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+        .task {
+            if appModel.allRequiredProvidersAreSupported {
+                await appModel.requestWorldSensingAuthorization()
+            }
+        }
+        .task {
+            await appModel.monitorSessionEvents()
+        }
     }
 }

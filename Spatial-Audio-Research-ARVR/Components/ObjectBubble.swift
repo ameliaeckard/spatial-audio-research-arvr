@@ -1,7 +1,7 @@
 //
 //  ObjectBubble.swift
 //  Spatial-Audio-Research-ARVR
-//
+//  Updated by Amelia Eckard on 10/21/25.
 //
 
 import SwiftUI
@@ -11,14 +11,25 @@ struct ObjectBubble: View {
     let icon: String
     let color: Color
     let isSelected: Bool
+    let isDetected: Bool
     let onTap: () -> Void
     
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 40))
-                    .foregroundStyle(isSelected ? color : .primary)
+                ZStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 40))
+                        .foregroundStyle(isSelected ? color : .primary)
+                    
+                    // Detection indicator
+                    if isDetected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.green)
+                            .offset(x: 25, y: -25)
+                    }
+                }
                 
                 Text(objectName)
                     .font(.caption)

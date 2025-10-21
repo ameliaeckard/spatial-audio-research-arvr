@@ -1,6 +1,9 @@
 //
 //  ContentView.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 10/16/25.
+//
+//  Holds the main view for the app using SwiftUI.
 //
 //
 

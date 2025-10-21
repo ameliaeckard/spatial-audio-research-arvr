@@ -1,6 +1,9 @@
 //
 //  ResearchTestingView.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 10/21/25.
+//
+//  Holds the research testing module/view for controlled scenarios using SwiftUI.
 //
 //
 
