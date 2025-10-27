@@ -36,7 +36,7 @@ struct MainMenuView: View {
             Spacer()
             
             if appModel.canEnterImmersiveSpace {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     // Live Detection Button - Opens Immersive Space
                     Button {
                         Task {
@@ -81,10 +81,6 @@ struct MainMenuView: View {
                 Text("Vision Pro Research Study")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                
-                Text("Made by Amelia Eckard")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
             .padding(.bottom, 40)
         }

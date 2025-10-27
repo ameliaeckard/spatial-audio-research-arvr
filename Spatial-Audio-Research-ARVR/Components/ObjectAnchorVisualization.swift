@@ -8,6 +8,7 @@
 
 import ARKit
 import RealityKit
+import UIKit
 
 @MainActor
 class ObjectAnchorVisualization {
