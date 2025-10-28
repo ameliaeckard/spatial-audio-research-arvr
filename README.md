@@ -1,10 +1,10 @@
-# Spatial Audio Navigation for Visually Impaired Users
+# Spatial Audio-Augmented Computer Vision: An Approach to Spatial Audio Cues Using the Apple Vision Pro
 
 A research project exploring how spatial audio cues on Apple Vision Pro can enhance object recognition and navigation for visually impaired users.
 
 ## Research Question
 
-How do spatial audio cues using the Apple Vision Pro affect real-world object recognition accuracy and response time for visually impaired users?
+How do computer vision-driven spatial audio cues using the Apple Vision Pro affect real-world object recognition accuracy and response time for visually impaired users?
 
 ## Primary Objectives
 
