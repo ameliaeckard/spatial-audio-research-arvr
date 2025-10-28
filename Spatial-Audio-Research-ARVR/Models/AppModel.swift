@@ -1,7 +1,7 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/21/25.
+//  Updated by Amelia Eckard on 10/28/25.
 //
 //  Handles the app's model data and state using Swift's Observable feature.
 //
@@ -13,9 +13,7 @@ import SwiftUI
 @MainActor
 @Observable
 class AppModel {
-    // MARK: - Enums
     
-    //Tracks whether or not the AI view is open or closed. Safety net to reset state when closed.
     enum ImmersiveSpaceState {
         case closed
         case inTransition
@@ -26,7 +24,6 @@ class AppModel {
         case mug = "Mug"
         case waterBottle = "Water Bottle"
         case chair = "Chair"
-        // Three objects for detection; each have icon in live detection menu.
 
         var icon: String {
             switch self {
@@ -45,32 +42,33 @@ class AppModel {
         }
     }
     
-    // MARK: - Published Properties
-    
     var immersiveSpaceState = ImmersiveSpaceState.closed {
         didSet {
             guard immersiveSpaceState == .closed else { return }
             arkitSession.stop()
             selectedObject = nil
-            objectVisualizations.removeAll()
             detectedObjects.removeAll()
+            stopComputerVisionDetection()
         }
     }
     
     var selectedObject: DetectionObject? = nil
-    var objectVisualizations: [UUID: ObjectAnchorVisualization] = [:]
     var providersStoppedWithError = false
     var detectedObjects: [DetectionObject: Bool] = [:]
-    // Object detection (ex: detectedObjects[.mug]) is true, object is currently detected.)
     
-    // MARK: - Authorization & Provider Status
+    var objectDetector = CoreMLObjectDetector()
+    var audioManager = SpatialAudioManager()
+    var isDetecting = false
+    var cvDetectedObjects: [CoreMLObjectDetector.DetectedObject] = []
+    var boundingBoxes: [UUID: BoundingBoxEntity] = [:]
+    var rootEntity: Entity?
     
     var allRequiredAuthorizationsAreGranted: Bool {
         worldSensingAuthorizationStatus == .allowed
     }
     
     var allRequiredProvidersAreSupported: Bool {
-        HandTrackingProvider.isSupported && ObjectTrackingProvider.isSupported
+        WorldTrackingProvider.isSupported
     }
     
     var canEnterImmersiveSpace: Bool {
@@ -78,20 +76,12 @@ class AppModel {
     }
     
     var isReadyToRun: Bool {
-        handTrackingProvider?.state == .initialized && objectTrackingProvider?.state == .initialized
+        worldTrackingProvider?.state == .running
     }
     
-    // MARK: - Private Properties
-    
     private var arkitSession = ARKitSession()
-    private var handTrackingProvider: HandTrackingProvider?
-    private var objectTrackingProvider: ObjectTrackingProvider?
+    private var worldTrackingProvider: WorldTrackingProvider?
     private var worldSensingAuthorizationStatus = ARKitSession.AuthorizationStatus.notDetermined
-    private var hasLoadedReferenceObjects = false
-    
-    let referenceObjectLoader = ReferenceObjectLoader()
-    
-    // MARK: - Session Management
     
     func monitorSessionEvents() async {
         for await event in arkitSession.events {
@@ -139,117 +129,105 @@ class AppModel {
         
         worldSensingAuthorizationStatus = authorizationResult
     }
-    //Asks user for camera access if not already granted. If it's granted, canEnterImmersiveSpace is true..
 
-    // MARK: - Object Tracking
-    
-    func startTracking(with rootEntity: Entity) async {
-        // Load reference objects if not already loaded
-        if !hasLoadedReferenceObjects && allRequiredProvidersAreSupported {
-            await referenceObjectLoader.loadReferenceObjects()
-            hasLoadedReferenceObjects = true
-        }
+    func startComputerVisionTracking() async {
+        guard !isDetecting else { return }
         
-        let referenceObjects = referenceObjectLoader.referenceObjects
-        
-        guard !referenceObjects.isEmpty else {
-            print("No reference objects found to start tracking")
-            return
-        }
-        
-        let objectTrackingProvider = ObjectTrackingProvider(referenceObjects: referenceObjects)
-        let handTrackingProvider = HandTrackingProvider()
+        let worldTrackingProvider = WorldTrackingProvider()
         
         do {
-            try await arkitSession.run([objectTrackingProvider, handTrackingProvider])
+            try await arkitSession.run([worldTrackingProvider])
+            self.worldTrackingProvider = worldTrackingProvider
+            print("WorldTrackingProvider started successfully")
         } catch {
             print("Error running arkitSession: \(error)")
             return
         }
         
-        self.handTrackingProvider = handTrackingProvider
-        self.objectTrackingProvider = objectTrackingProvider
-        
-        Task {
-            await processHandUpdates()
+        while worldTrackingProvider.state != .running {
+            try? await Task.sleep(for: .milliseconds(100))
         }
         
-        Task {
-            await processObjectUpdates(with: rootEntity)
+        isDetecting = true
+        
+        await processComputerVisionDetection()
+    }
+    
+    private func processComputerVisionDetection() async {
+        while isDetecting {
+            guard let deviceAnchor = worldTrackingProvider?.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+            
+            objectDetector.processARFrame(deviceAnchor)
+            
+            let cameraTransform = deviceAnchor.originFromAnchorTransform
+            let cameraPosition = SIMD3<Float>(
+                cameraTransform.columns.3.x,
+                cameraTransform.columns.3.y,
+                cameraTransform.columns.3.z
+            )
+            
+            let rotation = simd_quatf(cameraTransform)
+            
+            await MainActor.run {
+                self.cvDetectedObjects = objectDetector.detectedObjects
+                self.updateDetectionStatus()
+                self.updateBoundingBoxes()
+            }
+            
+            audioManager.updateAudioForObjects(
+                objectDetector.detectedObjects,
+                listenerPosition: cameraPosition,
+                listenerOrientation: rotation
+            )
+            
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
     
-    // MARK: - Private Methods
-    
-    private func processHandUpdates() async {
-        guard let handTrackingProvider else {
-            print("Error obtaining handTrackingProvider upon processHandUpdates")
-            return
+    private func updateBoundingBoxes() {
+        guard let rootEntity = rootEntity else { return }
+        
+        let currentObjectIds = Set(cvDetectedObjects.map { $0.id })
+        
+        for (id, box) in boundingBoxes {
+            if !currentObjectIds.contains(id) {
+                box.removeFromParent()
+                boundingBoxes.removeValue(forKey: id)
+            }
         }
         
-        for await update in handTrackingProvider.anchorUpdates {
-            let handAnchor = update.anchor
-            
-            // Hand tracking logic for spatial audio manipulation
-            for (_, visualization) in objectVisualizations {
-                guard let modelEntity = visualization.entity.findEntity(named: Constants.objectCaptureMeshName) as? ModelEntity
-                else {
-                    continue
-                }
-                
-                // Check if hand is near detected object
-                if let (_, distance) = handAnchor.nearestFingerDistance(to: modelEntity) {
-                    // This is where you could trigger spatial audio cues based on proximity
-                    if distance < Constants.maximumInteractionDistance {
-                        // Trigger spatial audio feedback here
-                        print("Hand \(handAnchor.chirality == .left ? "left" : "right") near \(visualization.objectName ?? "unknown") at distance: \(distance)m")
-                    }
-                }
+        for object in cvDetectedObjects {
+            if let existingBox = boundingBoxes[object.id] {
+                existingBox.update(with: object)
+            } else {
+                let newBox = BoundingBoxEntity(for: object)
+                rootEntity.addChild(newBox)
+                boundingBoxes[object.id] = newBox
             }
         }
     }
     
-    private func processObjectUpdates(with rootEntity: Entity) async {
-        guard let objectTrackingProvider else {
-            print("Error obtaining objectTrackingProvider upon processObjectUpdates")
-            return
-        }
-        
-        for await anchorUpdate in objectTrackingProvider.anchorUpdates {
-            let anchor = anchorUpdate.anchor
-            let id = anchor.id
-            
-            switch anchorUpdate.event {
-            case .added:
-                // Create visualization for detected object
-                let model: Entity? = referenceObjectLoader.usdzsPerReferenceObjectID[anchor.referenceObject.id]
-                let visualization = await ObjectAnchorVisualization(for: anchor, withModel: model)
-                objectVisualizations[id] = visualization
-                rootEntity.addChild(visualization.entity)
-                
-                // Update detected objects dictionary
-                if let objectName = visualization.objectName,
-                   let detectedObject = DetectionObject.allCases.first(where: { $0.rawValue == objectName }) {
-                    detectedObjects[detectedObject] = true
-                    
-                    // Trigger spatial audio cue for detection
-                    print("✓ Detected: \(objectName)")
-                }
-                
-            case .updated:
-                objectVisualizations[id]?.update(with: anchor)
-                
-            case .removed:
-                // Update detected objects dictionary
-                if let objectName = objectVisualizations[id]?.objectName,
-                   let detectedObject = DetectionObject.allCases.first(where: { $0.rawValue == objectName }) {
-                    detectedObjects[detectedObject] = false
-                    print("✗ Lost tracking: \(objectName)")
-                }
-                
-                objectVisualizations[id]?.entity.removeFromParent()
-                objectVisualizations.removeValue(forKey: id)
+    private func updateDetectionStatus() {
+        for object in DetectionObject.allCases {
+            let isDetected = cvDetectedObjects.contains { detected in
+                detected.label.lowercased().contains(object.rawValue.lowercased()) ||
+                object.rawValue.lowercased().contains(detected.label.lowercased())
             }
+            detectedObjects[object] = isDetected
         }
+    }
+    
+    func stopComputerVisionDetection() {
+        isDetecting = false
+        audioManager.stop()
+        cvDetectedObjects.removeAll()
+        
+        for (_, box) in boundingBoxes {
+            box.removeFromParent()
+        }
+        boundingBoxes.removeAll()
     }
 }

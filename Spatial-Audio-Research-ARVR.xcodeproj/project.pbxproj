@@ -190,12 +190,14 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required for object detection in our accessibility research study.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "World sensing is required to track objects in your environment for spatial audio feedback.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "UNCC.Spatial-Audio-Research-ARVR";
+				PRODUCT_BUNDLE_IDENTIFIER = arvrresearchwtodddobbs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -221,12 +223,14 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required for object detection in our accessibility research study.";
+				INFOPLIST_KEY_NSWorldSensingUsageDescription = "World sensing is required to track objects in your environment for spatial audio feedback.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "UNCC.Spatial-Audio-Research-ARVR";
+				PRODUCT_BUNDLE_IDENTIFIER = arvrresearchwtodddobbs;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

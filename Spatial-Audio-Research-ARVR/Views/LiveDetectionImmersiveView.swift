@@ -1,7 +1,7 @@
 //
 //  LiveDetectionImmersiveView.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/21/25.
+//  Updated by Amelia Eckard on 10/28/25.
 //
 //  View for the live detection immersive space. Uses RealityView to display AR content.
 //
@@ -20,6 +20,7 @@ struct LiveDetectionImmersiveView: View {
     var body: some View {
         RealityView { content in
             content.add(rootEntity)
+            appModel.rootEntity = rootEntity
         }
         .overlay(alignment: .top) {
             headerView
@@ -30,8 +31,11 @@ struct LiveDetectionImmersiveView: View {
         .overlay(alignment: .topLeading) {
             exitButton
         }
+        .overlay(alignment: .topTrailing) {
+            detectionDebugView
+        }
         .task {
-            await appModel.startTracking(with: rootEntity)
+            await appModel.startComputerVisionTracking()
         }
         .onChange(of: scenePhase) { _, newPhase in
             handleScenePhaseChange(newPhase)
@@ -40,11 +44,9 @@ struct LiveDetectionImmersiveView: View {
             handleProviderError(providersStoppedWithError)
         }
         .onDisappear {
-            cleanupVisualizations()
+            appModel.stopComputerVisionDetection()
         }
     }
-    
-    // MARK: - Header View
     
     private var headerView: some View {
         VStack(spacing: 16) {
@@ -93,24 +95,80 @@ struct LiveDetectionImmersiveView: View {
     private var trackingStatusView: some View {
         Group {
             if appModel.isReadyToRun {
-                Text("Tracking Active")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .padding(8)
-                    .background(.white.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                    
+                    Text("CV Tracking Active")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                .padding(8)
+                .background(.white.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
-                Text("Initializing...")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .padding(8)
-                    .background(.white.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                    
+                    Text("Initializing...")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                .padding(8)
+                .background(.white.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
     }
     
-    // MARK: - Object Bubbles View
+    private var detectionDebugView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Detected Objects")
+                .font(.headline)
+                .foregroundStyle(.white)
+            
+            if appModel.cvDetectedObjects.isEmpty {
+                Text("No objects detected")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+            } else {
+                ForEach(appModel.cvDetectedObjects.prefix(5)) { object in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 6, height: 6)
+                        
+                        Text(object.label)
+                            .font(.caption)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Text(String(format: "%.1fm", object.distance))
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                        
+                        Text(String(format: "%.0f%%", object.confidence * 100))
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            }
+            
+            Text("\(appModel.cvDetectedObjects.count) total")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .foregroundStyle(.white)
+        .padding()
+        .frame(width: 250)
+        .background(.black.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.top, 60)
+        .padding(.trailing, 60)
+    }
     
     private var objectBubblesView: some View {
         HStack(spacing: 30) {
@@ -128,8 +186,6 @@ struct LiveDetectionImmersiveView: View {
         }
         .padding(.bottom, 100)
     }
-    
-    // MARK: - Exit Button
     
     private var exitButton: some View {
         Button {
@@ -153,8 +209,6 @@ struct LiveDetectionImmersiveView: View {
         .padding(.top, 60)
         .padding(.leading, 60)
     }
-    
-    // MARK: - Helper Methods
     
     private func toggleObjectSelection(_ object: AppModel.DetectionObject) {
         if appModel.selectedObject == object {
@@ -187,12 +241,5 @@ struct LiveDetectionImmersiveView: View {
             }
             appModel.providersStoppedWithError = false
         }
-    }
-    
-    private func cleanupVisualizations() {
-        for (_, visualization) in appModel.objectVisualizations {
-            rootEntity.removeChild(visualization.entity)
-        }
-        appModel.objectVisualizations.removeAll()
     }
 }

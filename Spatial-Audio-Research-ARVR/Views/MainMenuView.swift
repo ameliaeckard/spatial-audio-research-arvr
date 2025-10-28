@@ -1,7 +1,7 @@
 //
 //  MainMenuView.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/21/25.
+//  Updated by Amelia Eckard on 10/28/25.
 //
 //  Holds the main menu view for the app using SwiftUI.
 //
@@ -34,14 +34,36 @@ struct MainMenuView: View {
             .padding(.top, 60)
             
             Spacer()
+                .frame(minHeight: 30)
             
             if appModel.canEnterImmersiveSpace {
-                VStack(spacing: 20) {
-                    // Live Detection Button - Opens Immersive Space
+                VStack(spacing: 30) {
                     Button {
                         Task {
+                            guard appModel.immersiveSpaceState == .closed else {
+                                print("Immersive space is already open or in transition")
+                                return
+                            }
+                            
+                            appModel.immersiveSpaceState = .inTransition
                             dismissWindow(id: "main-menu")
-                            await openImmersiveSpace(id: "live-detection")
+                            try? await Task.sleep(for: .milliseconds(200))
+                            
+                            switch await openImmersiveSpace(id: "live-detection") {
+                            case .opened:
+                                print("Immersive space opened successfully")
+                            case .error:
+                                print("Failed to open immersive space")
+                                appModel.immersiveSpaceState = .closed
+                                openWindow(id: "main-menu")
+                            case .userCancelled:
+                                print("User cancelled immersive space")
+                                appModel.immersiveSpaceState = .closed
+                                openWindow(id: "main-menu")
+                            @unknown default:
+                                appModel.immersiveSpaceState = .closed
+                                openWindow(id: "main-menu")
+                            }
                         }
                     } label: {
                         MenuCard(
@@ -52,11 +74,16 @@ struct MainMenuView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .frame(height: 110)
+                    .disabled(appModel.immersiveSpaceState != .closed)
+                    .opacity(appModel.immersiveSpaceState != .closed ? 0.5 : 1.0)
                     
-                    // Research Testing Button - Opens Window
                     Button {
-                        openWindow(id: "research-testing")
-                        dismissWindow(id: "main-menu")
+                        Task {
+                            dismissWindow(id: "main-menu")
+                            try? await Task.sleep(for: .milliseconds(200))
+                            openWindow(id: "research-testing")
+                        }
                     } label: {
                         MenuCard(
                             title: "Research Testing",
@@ -66,12 +93,15 @@ struct MainMenuView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .frame(height: 110)
                 }
+                .frame(maxWidth: 600)
             } else {
                 ErrorView()
             }
             
             Spacer()
+                .frame(minHeight: 30)
             
             VStack(spacing: 8) {
                 Text("University of North Carolina at Charlotte")
@@ -84,8 +114,8 @@ struct MainMenuView: View {
             }
             .padding(.bottom, 40)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .frame(width: 800, height: 600)
+        .padding(40)
         .task {
             if appModel.allRequiredProvidersAreSupported {
                 await appModel.requestWorldSensingAuthorization()
