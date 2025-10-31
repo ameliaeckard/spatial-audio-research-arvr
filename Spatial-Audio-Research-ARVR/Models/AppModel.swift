@@ -20,6 +20,11 @@ class AppModel {
         case open
     }
     
+    enum DetectionMode {
+        case mock  // For development/testing without model
+        case yolo  // For real object detection with YOLO
+    }
+    
     enum DetectionObject: String, CaseIterable {
         case mug = "Mug"
         case waterBottle = "Water Bottle"
@@ -56,12 +61,36 @@ class AppModel {
     var providersStoppedWithError = false
     var detectedObjects: [DetectionObject: Bool] = [:]
     
-    var objectDetector = CoreMLObjectDetector()
+    // Detection mode configuration
+    var detectionMode: DetectionMode = .mock  // Change to .yolo when model is ready
+    var objectDetector: ObjectDetectionProtocol = CoreMLObjectDetector()
     var audioManager = SpatialAudioManager()
     var isDetecting = false
-    var cvDetectedObjects: [CoreMLObjectDetector.DetectedObject] = []
+    var cvDetectedObjects: [DetectedObject] = []
     var boundingBoxes: [UUID: BoundingBoxEntity] = [:]
     var rootEntity: Entity?
+    
+    // Initialize with selected detection mode
+    init() {
+        switchDetectionMode(to: detectionMode)
+    }
+    
+    // Switch between detection modes
+    func switchDetectionMode(to mode: DetectionMode) {
+        objectDetector.stop()
+        
+        switch mode {
+        case .mock:
+            objectDetector = CoreMLObjectDetector()
+            print("🔄 Switched to MOCK detection mode")
+        case .yolo:
+            objectDetector = YOLOObjectDetector()
+            print("🔄 Switched to YOLO detection mode")
+        }
+        
+        detectionMode = mode
+        cvDetectedObjects.removeAll()
+    }
     
     var allRequiredAuthorizationsAreGranted: Bool {
         worldSensingAuthorizationStatus == .allowed
@@ -222,6 +251,7 @@ class AppModel {
     
     func stopComputerVisionDetection() {
         isDetecting = false
+        objectDetector.stop()
         audioManager.stop()
         cvDetectedObjects.removeAll()
         

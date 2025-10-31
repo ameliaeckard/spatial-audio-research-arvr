@@ -54,7 +54,7 @@ class SpatialAudioManager {
         }
     }
     
-    func updateAudioForObjects(_ objects: [CoreMLObjectDetector.DetectedObject],
+    func updateAudioForObjects(_ objects: [DetectedObject],
                               listenerPosition: SIMD3<Float>,
                               listenerOrientation: simd_quatf) {
         
@@ -85,7 +85,7 @@ class SpatialAudioManager {
         }
     }
     
-    private func updateAudioForObject(_ object: CoreMLObjectDetector.DetectedObject) {
+    private func updateAudioForObject(_ object: DetectedObject) {
         let player = audioPlayers[object.id] ?? createAudioPlayer(for: object)
         
         guard let environment = audioEnvironment else { return }
@@ -135,7 +135,7 @@ class SpatialAudioManager {
         }
     }
     
-    private func createAudioPlayer(for object: CoreMLObjectDetector.DetectedObject) -> AVAudioPlayerNode {
+    private func createAudioPlayer(for object: DetectedObject) -> AVAudioPlayerNode {
         guard let engine = audioEngine,
               let environment = audioEnvironment else {
             fatalError("Audio engine not initialized")

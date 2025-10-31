@@ -1,7 +1,7 @@
 //
 //  CoreMLObjectDetector.swift
 //  Spatial-Audio-Research-ARVR
-//  Real object detection using Vision framework
+//  Mock object detection for development/testing
 //
 
 import ARKit
@@ -10,17 +10,7 @@ import RealityKit
 import CoreML
 
 @Observable
-class CoreMLObjectDetector {
-    
-    struct DetectedObject: Identifiable {
-        let id = UUID()
-        let label: String
-        let confidence: Float
-        let worldPosition: SIMD3<Float>
-        let boundingBox: CGRect
-        let distance: Float
-        let direction: SIMD3<Float>
-    }
+class CoreMLObjectDetector: ObjectDetectionProtocol {
     
     var detectedObjects: [DetectedObject] = []
     
@@ -105,6 +95,12 @@ class CoreMLObjectDetector {
     
     func processARFrame(_ deviceAnchor: DeviceAnchor) {
         self.currentDeviceAnchor = deviceAnchor
+    }
+    
+    func stop() {
+        detectionTimer?.invalidate()
+        detectionTimer = nil
+        detectedObjects.removeAll()
     }
     
     private func processVisionResults(_ observations: [VNRectangleObservation]) {

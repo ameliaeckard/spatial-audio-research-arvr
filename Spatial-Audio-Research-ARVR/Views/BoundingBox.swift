@@ -12,7 +12,7 @@ class BoundingBoxEntity: Entity {
     private var boxModel: ModelEntity?
     private var labelEntity: Entity?
     
-    init(for detectedObject: CoreMLObjectDetector.DetectedObject) {
+    init(for detectedObject: DetectedObject) {
         super.init()
         
         createBoundingBox(for: detectedObject)
@@ -23,7 +23,7 @@ class BoundingBoxEntity: Entity {
         super.init()
     }
     
-    private func createBoundingBox(for object: CoreMLObjectDetector.DetectedObject) {
+    private func createBoundingBox(for object: DetectedObject) {
         let boxSize: Float = 0.3
         let mesh = MeshResource.generateBox(size: [boxSize, boxSize, boxSize])
         
@@ -49,7 +49,7 @@ class BoundingBoxEntity: Entity {
         self.position = position
     }
     
-    func update(with object: CoreMLObjectDetector.DetectedObject) {
+    func update(with object: DetectedObject) {
         updatePosition(object.worldPosition)
         
         if let boxModel = boxModel {
