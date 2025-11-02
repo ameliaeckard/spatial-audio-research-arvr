@@ -1,6 +1,8 @@
 //
 //  ObjectDetectionProtocol.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 11/2/25.
+//
 //  Created for swappable detection modes
 //
 
@@ -8,7 +10,6 @@ import ARKit
 import RealityKit
 
 /// Protocol for object detection implementations
-@Observable
 protocol ObjectDetectionProtocol: AnyObject {
     
     /// Detected objects array

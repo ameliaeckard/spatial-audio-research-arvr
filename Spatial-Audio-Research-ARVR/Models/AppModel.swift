@@ -1,7 +1,7 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/28/25.
+//  Updated by Amelia Eckard on 11/2/25.
 //
 //  Handles the app's model data and state using Swift's Observable feature.
 //
@@ -62,7 +62,7 @@ class AppModel {
     var detectedObjects: [DetectionObject: Bool] = [:]
     
     // Detection mode configuration
-    var detectionMode: DetectionMode = .mock  // Change to .yolo when model is ready
+    var detectionMode: DetectionMode = .yolo  // Change to .yolo when model is ready
     var objectDetector: ObjectDetectionProtocol = CoreMLObjectDetector()
     var audioManager = SpatialAudioManager()
     var isDetecting = false

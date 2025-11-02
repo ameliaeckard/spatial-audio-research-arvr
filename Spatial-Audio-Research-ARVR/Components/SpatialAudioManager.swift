@@ -1,6 +1,8 @@
 //
 //  SpatialAudioManager.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 11/2/25.
+//
 //  Simplified spatial audio for object detection
 //
 
@@ -74,7 +76,7 @@ class SpatialAudioManager {
         environment.listenerAngularOrientation = orientation
         
         let currentObjectIds = Set(objects.map { $0.id })
-        for (id, player) in audioPlayers {
+        for (id, _) in audioPlayers {
             if !currentObjectIds.contains(id) {
                 removeAudioPlayer(id: id)
             }
@@ -88,7 +90,7 @@ class SpatialAudioManager {
     private func updateAudioForObject(_ object: DetectedObject) {
         let player = audioPlayers[object.id] ?? createAudioPlayer(for: object)
         
-        guard let environment = audioEnvironment else { return }
+        guard audioEnvironment != nil else { return }
         
         var pos = AVAudio3DPoint()
         pos.x = object.worldPosition.x

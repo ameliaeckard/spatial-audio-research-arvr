@@ -1,6 +1,8 @@
 //
 //  CoreMLObjectDetector.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 11/2/25.
+//
 //  Mock object detection for development/testing
 //
 
