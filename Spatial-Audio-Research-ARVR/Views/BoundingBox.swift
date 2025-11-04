@@ -1,6 +1,8 @@
 //
 //  BoundingBoxEntity.swift
 //  Spatial-Audio-Research-ARVR
+//  Updated by Amelia Eckard on 11/3/25.
+//
 //  Creates 3D bounding boxes for detected objects
 //
 

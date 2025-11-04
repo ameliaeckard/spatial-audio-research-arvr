@@ -1,14 +1,15 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/2/25.
+//  Updated by Amelia Eckard on 11/3/25.
 //
-//  Handles the app's model data and state using Swift's Observable feature.
+//  
 //
 
 import ARKit
 import RealityKit
 import SwiftUI
+import QuartzCore
 
 @MainActor
 @Observable
@@ -21,8 +22,8 @@ class AppModel {
     }
     
     enum DetectionMode {
-        case mock  // For development/testing without model
-        case yolo  // For real object detection with YOLO
+        case mock
+        case yolo
     }
     
     enum DetectionObject: String, CaseIterable {
@@ -61,8 +62,7 @@ class AppModel {
     var providersStoppedWithError = false
     var detectedObjects: [DetectionObject: Bool] = [:]
     
-    // Detection mode configuration
-    var detectionMode: DetectionMode = .yolo  // Change to .yolo when model is ready
+    var detectionMode: DetectionMode = .mock
     var objectDetector: ObjectDetectionProtocol = CoreMLObjectDetector()
     var audioManager = SpatialAudioManager()
     var isDetecting = false
@@ -70,26 +70,8 @@ class AppModel {
     var boundingBoxes: [UUID: BoundingBoxEntity] = [:]
     var rootEntity: Entity?
     
-    // Initialize with selected detection mode
     init() {
-        switchDetectionMode(to: detectionMode)
-    }
-    
-    // Switch between detection modes
-    func switchDetectionMode(to mode: DetectionMode) {
-        objectDetector.stop()
-        
-        switch mode {
-        case .mock:
-            objectDetector = CoreMLObjectDetector()
-            print("🔄 Switched to MOCK detection mode")
-        case .yolo:
-            objectDetector = YOLOObjectDetector()
-            print("🔄 Switched to YOLO detection mode")
-        }
-        
-        detectionMode = mode
-        cvDetectedObjects.removeAll()
+        print("Real-time detection")
     }
     
     var allRequiredAuthorizationsAreGranted: Bool {
@@ -132,7 +114,7 @@ class AppModel {
                     worldSensingAuthorizationStatus = status
                 }
             default:
-                print("An unknown ARKitSession event occurred")
+                break
             }
         }
     }
@@ -140,23 +122,17 @@ class AppModel {
     func queryWorldSensingAuthorization() async {
         let authorizationQuery = await arkitSession.queryAuthorization(for: [.worldSensing])
         
-        guard let authorizationResult = authorizationQuery[.worldSensing] else {
-            print("Failed to obtain .worldSensing authorization query result")
-            return
+        if let worldSensingResult = authorizationQuery[.worldSensing] {
+            worldSensingAuthorizationStatus = worldSensingResult
         }
-        
-        worldSensingAuthorizationStatus = authorizationResult
     }
     
     func requestWorldSensingAuthorization() async {
         let authorizationRequest = await arkitSession.requestAuthorization(for: [.worldSensing])
         
-        guard let authorizationResult = authorizationRequest[.worldSensing] else {
-            print("Failed to obtain .worldSensing authorization request result")
-            return
+        if let worldSensingResult = authorizationRequest[.worldSensing] {
+            worldSensingAuthorizationStatus = worldSensingResult
         }
-        
-        worldSensingAuthorizationStatus = authorizationResult
     }
 
     func startComputerVisionTracking() async {
@@ -167,9 +143,9 @@ class AppModel {
         do {
             try await arkitSession.run([worldTrackingProvider])
             self.worldTrackingProvider = worldTrackingProvider
-            print("WorldTrackingProvider started successfully")
+            print("World tracking running")
         } catch {
-            print("Error running arkitSession: \(error)")
+            print("Error: \(error)")
             return
         }
         
@@ -177,14 +153,30 @@ class AppModel {
             try? await Task.sleep(for: .milliseconds(100))
         }
         
+        try? await Task.sleep(for: .milliseconds(500))
+        
         isDetecting = true
         
         await processComputerVisionDetection()
     }
     
+    private func processCameraFrames() async {
+        // Not used in mock mode
+    }
+    
     private func processComputerVisionDetection() async {
+        var frameCount = 0
+        
         while isDetecting {
-            guard let deviceAnchor = worldTrackingProvider?.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
+            frameCount += 1
+            if frameCount % 2 != 0 {
+                try? await Task.sleep(for: .milliseconds(50))
+                continue
+            }
+            
+            guard let provider = worldTrackingProvider,
+                  provider.state == .running,
+                  let deviceAnchor = provider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
                 try? await Task.sleep(for: .milliseconds(100))
                 continue
             }
@@ -212,7 +204,7 @@ class AppModel {
                 listenerOrientation: rotation
             )
             
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(200))
         }
     }
     
@@ -221,11 +213,9 @@ class AppModel {
         
         let currentObjectIds = Set(cvDetectedObjects.map { $0.id })
         
-        for (id, box) in boundingBoxes {
-            if !currentObjectIds.contains(id) {
-                box.removeFromParent()
-                boundingBoxes.removeValue(forKey: id)
-            }
+        for (id, box) in boundingBoxes where !currentObjectIds.contains(id) {
+            box.removeFromParent()
+            boundingBoxes.removeValue(forKey: id)
         }
         
         for object in cvDetectedObjects {
@@ -250,6 +240,8 @@ class AppModel {
     }
     
     func stopComputerVisionDetection() {
+        guard isDetecting else { return }
+        
         isDetecting = false
         objectDetector.stop()
         audioManager.stop()

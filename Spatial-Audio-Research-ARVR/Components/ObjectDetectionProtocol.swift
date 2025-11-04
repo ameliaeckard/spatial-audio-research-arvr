@@ -1,28 +1,23 @@
 //
 //  ObjectDetectionProtocol.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/2/25.
-//
-//  Created for swappable detection modes
+//  Updated by Amelia Eckard on 11/3/25.
+
+//  Updated for camera frame support
 //
 
 import ARKit
 import RealityKit
 
-/// Protocol for object detection implementations
 protocol ObjectDetectionProtocol: AnyObject {
     
-    /// Detected objects array
     var detectedObjects: [DetectedObject] { get set }
     
-    /// Process AR frame from Vision Pro
     func processARFrame(_ deviceAnchor: DeviceAnchor)
     
-    /// Stop detection and cleanup
     func stop()
 }
 
-/// Unified detected object model
 struct DetectedObject: Identifiable {
     let id = UUID()
     let label: String

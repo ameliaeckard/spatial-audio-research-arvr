@@ -36,7 +36,7 @@ struct MenuCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             
             Spacer()
-                .frame(width: 20) // Force spacing
+                .frame(width: 20)
             
             Image(systemName: "chevron.right")
                 .foregroundStyle(.tertiary)
@@ -44,7 +44,7 @@ struct MenuCard: View {
                 .frame(width: 30)
         }
         .padding(24)
-        .frame(width: 500, height: 110) // Increased height
+        .frame(width: 500, height: 110)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(radius: 2)

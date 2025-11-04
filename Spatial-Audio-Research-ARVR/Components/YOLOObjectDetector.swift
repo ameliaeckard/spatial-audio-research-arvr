@@ -1,9 +1,9 @@
 //
 //  YOLOObjectDetector.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/2/25.
+//  Updated by Amelia Eckard on 11/3/25.
 //
-//  Real object detection using YOLO CoreML model
+//  Added CoreMedia import
 //
 
 import ARKit
@@ -11,6 +11,7 @@ import Vision
 import RealityKit
 import CoreML
 import QuartzCore
+import CoreMedia
 
 @Observable
 class YOLOObjectDetector: ObjectDetectionProtocol {
@@ -18,43 +19,30 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
     var detectedObjects: [DetectedObject] = []
     
     private var visionRequest: VNCoreMLRequest?
-    private let confidenceThreshold: Float = 0.5
+    private let confidenceThreshold: Float = 0.4
     private var isProcessing = false
     private var currentDeviceAnchor: DeviceAnchor?
     private var lastProcessTime: TimeInterval = 0
-    private let processingInterval: TimeInterval = 0.3
-    
-    private let expectedLabels = ["cup", "bottle", "chair", "dining table", "laptop"]
+    private let processingInterval: TimeInterval = 0.2
     
     init() {
         setupYOLOModel()
     }
     
     private func setupYOLOModel() {
-        // Try to find the model with either name
-        let modelNames = ["CustomObjectDetector", "yolo11n", "yolov8n"]
+        let modelNames = ["yolov8n", "yolo11n", "CustomObjectDetector"]
         var modelURL: URL?
         
         for name in modelNames {
             if let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc") {
                 modelURL = url
-                print("✅ Found model: \(name).mlmodelc")
-                break
-            }
-            if let url = Bundle.main.url(forResource: name, withExtension: "mlpackage") {
-                modelURL = url
-                print("✅ Found model: \(name).mlpackage")
+                print("Found model: \(name).mlmodelc")
                 break
             }
         }
         
         guard let modelURL = modelURL else {
-            print("⚠️ YOLO model not found. Tried:")
-            for name in modelNames {
-                print("   - \(name).mlmodelc")
-                print("   - \(name).mlpackage")
-            }
-            print("🔄 Running in MOCK mode - switch to .yolo when model is added")
+            print("YOLO model not found")
             return
         }
         
@@ -68,18 +56,17 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
             
             visionRequest?.imageCropAndScaleOption = .scaleFill
             
-            print("✅ YOLO model loaded successfully")
-            print("🎯 Ready to detect: \(expectedLabels.joined(separator: ", "))")
+            print("YOLO model loaded")
+            print("Ready for real-time detection")
             
         } catch {
-            print("❌ Failed to load YOLO model: \(error.localizedDescription)")
+            print("Failed to load YOLO model: \(error.localizedDescription)")
         }
     }
     
-    func processARFrame(_ deviceAnchor: DeviceAnchor) {
-        guard let request = visionRequest else {
-            return
-        }
+    // Process with camera frame sample buffer
+    func processARFrame(_ deviceAnchor: DeviceAnchor, cameraSample: CMSampleBuffer? = nil) {
+        guard let request = visionRequest else { return }
         
         let currentTime = CACurrentMediaTime()
         guard currentTime - lastProcessTime >= processingInterval else { return }
@@ -89,13 +76,33 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
         self.lastProcessTime = currentTime
         self.isProcessing = true
         
-        // Capture request locally for Task
         Task.detached { [weak self] in
             guard let self = self else { return }
             
-            let pixelBuffer = self.createTestPixelBuffer()
+            var pixelBuffer: CVPixelBuffer?
+            
+            // Try to get pixel buffer from camera sample
+            if let sample = cameraSample,
+               let imageBuffer = CMSampleBufferGetImageBuffer(sample) {
+                pixelBuffer = imageBuffer
+                print("Processing real camera frame")
+            } else {
+                print("No camera frame")
+                await MainActor.run {
+                    self.isProcessing = false
+                }
+                return
+            }
+            
+            guard let buffer = pixelBuffer else {
+                await MainActor.run {
+                    self.isProcessing = false
+                }
+                return
+            }
+            
             let handler = VNImageRequestHandler(
-                cvPixelBuffer: pixelBuffer,
+                cvPixelBuffer: buffer,
                 orientation: .up,
                 options: [:]
             )
@@ -103,12 +110,17 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
             do {
                 try handler.perform([request])
             } catch {
-                print("❌ Failed to perform vision request: \(error.localizedDescription)")
+                print("Vision failed: \(error.localizedDescription)")
                 await MainActor.run {
                     self.isProcessing = false
                 }
             }
         }
+    }
+    
+    // Compatibility wrapper
+    func processARFrame(_ deviceAnchor: DeviceAnchor) {
+        processARFrame(deviceAnchor, cameraSample: nil)
     }
     
     private func processVisionResults(_ request: VNRequest, _ error: Error?) {
@@ -119,11 +131,25 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
         }
         
         if let error = error {
-            print("❌ Vision error: \(error.localizedDescription)")
+            print("Vision error: \(error.localizedDescription)")
             return
         }
         
         guard let observations = request.results as? [VNRecognizedObjectObservation] else {
+            Task { @MainActor in
+                if !self.detectedObjects.isEmpty {
+                    self.detectedObjects = []
+                }
+            }
+            return
+        }
+        
+        guard !observations.isEmpty else {
+            Task { @MainActor in
+                if !self.detectedObjects.isEmpty {
+                    self.detectedObjects = []
+                }
+            }
             return
         }
         
@@ -169,16 +195,15 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
         Task { @MainActor in
             self.detectedObjects = newObjects
             if !newObjects.isEmpty {
-                print("🎯 Detected \(newObjects.count) objects:")
+                print("Detected \(newObjects.count) objects:")
                 for obj in newObjects.prefix(3) {
-                    print("   - \(obj.label) (\(String(format: "%.1f", obj.distance))m, \(String(format: "%.0f", obj.confidence * 100))%)")
+                    print("   - \(obj.label) at \(String(format: "%.1fm", obj.distance)) (\(String(format: "%.0f", obj.confidence * 100))%)")
                 }
             }
         }
     }
     
     private func formatLabel(_ label: String) -> String {
-        // Convert YOLO labels to friendly names
         let labelMap: [String: String] = [
             "cup": "Mug",
             "bottle": "Water Bottle",
@@ -206,7 +231,6 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
         let centerX = Float(boundingBox.midX - 0.5) * 2.0
         let centerY = Float(0.5 - boundingBox.midY) * 2.0
         
-        // Estimate distance based on bounding box size
         let estimatedDistance: Float = 2.0 / Float(boundingBox.height)
         let clampedDistance = min(max(estimatedDistance, 0.5), 5.0)
         
@@ -235,25 +259,6 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
         )
         
         return cameraPos + direction * clampedDistance
-    }
-    
-    private nonisolated func createTestPixelBuffer() -> CVPixelBuffer {
-        var pixelBuffer: CVPixelBuffer?
-        let attributes: [String: Any] = [
-            kCVPixelBufferCGImageCompatibilityKey as String: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
-        ]
-        
-        CVPixelBufferCreate(
-            kCFAllocatorDefault,
-            640,
-            640,
-            kCVPixelFormatType_32BGRA,
-            attributes as CFDictionary,
-            &pixelBuffer
-        )
-        
-        return pixelBuffer!
     }
     
     func stop() {

@@ -1,10 +1,9 @@
 //
 //  ResearchTestingView.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/21/25.
+//  Updated by Amelia Eckard on 11/3/25.
 //
 //  Holds the research testing module/view for controlled scenarios using SwiftUI.
-//
 //
 
 import SwiftUI
@@ -27,8 +26,17 @@ struct ResearchTestingView: View {
             Spacer()
             
             Button {
-                openWindow(id: "main-menu")
-                dismissWindow(id: "research-testing")
+                Task {
+                    // Close research testing FIRST
+                    dismissWindow(id: "research-testing")
+                    
+                    // Small delay for smooth transition
+                    try? await Task.sleep(for: .milliseconds(200))
+                    
+                    // Reopen main menu
+                    openWindow(id: "main-menu")
+                    print("Returned to main menu from research testing")
+                }
             } label: {
                 HStack {
                     Image(systemName: "chevron.left")
@@ -41,6 +49,7 @@ struct ResearchTestingView: View {
             }
             .buttonStyle(.plain)
         }
+        .frame(width: 800, height: 600)
         .padding()
     }
 }

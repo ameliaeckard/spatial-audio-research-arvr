@@ -1,7 +1,7 @@
 //
 //  MainMenuView.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 10/28/25.
+//  Updated by Amelia Eckard on 11/3/25.
 //
 //  Holds the main menu view for the app using SwiftUI.
 //
@@ -46,22 +46,33 @@ struct MainMenuView: View {
                             }
                             
                             appModel.immersiveSpaceState = .inTransition
+                            
+                            // Close main menu FIRST
                             dismissWindow(id: "main-menu")
+                            
+                            // Small delay for smooth transition
                             try? await Task.sleep(for: .milliseconds(200))
                             
+                            // Open immersive space
                             switch await openImmersiveSpace(id: "live-detection") {
                             case .opened:
                                 print("Immersive space opened successfully")
-                            case .error:
+                                
+                                // CRITICAL FIX: Open the control panel window
+                                try? await Task.sleep(for: .milliseconds(300))
+                                openWindow(id: "live-detection-controls")
+                                print("Control panel opened")
+                                
+                            case .error, .userCancelled:
                                 print("Failed to open immersive space")
                                 appModel.immersiveSpaceState = .closed
+                                // Reopen main menu if failed
+                                try? await Task.sleep(for: .milliseconds(200))
                                 openWindow(id: "main-menu")
-                            case .userCancelled:
-                                print("User cancelled immersive space")
-                                appModel.immersiveSpaceState = .closed
-                                openWindow(id: "main-menu")
+                                
                             @unknown default:
                                 appModel.immersiveSpaceState = .closed
+                                try? await Task.sleep(for: .milliseconds(200))
                                 openWindow(id: "main-menu")
                             }
                         }
@@ -80,8 +91,13 @@ struct MainMenuView: View {
                     
                     Button {
                         Task {
+                            // Close main menu FIRST
                             dismissWindow(id: "main-menu")
+                            
+                            // Small delay for smooth transition
                             try? await Task.sleep(for: .milliseconds(200))
+                            
+                            // Open research testing window
                             openWindow(id: "research-testing")
                         }
                     } label: {
