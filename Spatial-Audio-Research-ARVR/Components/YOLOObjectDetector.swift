@@ -30,19 +30,25 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
     }
     
     private func setupYOLOModel() {
-        let modelNames = ["yolov8n", "yolo11n", "CustomObjectDetector"]
+        // Try multiple model names and formats
+        let modelNames = ["CustomObjectDetector", "yolov8n", "yolo11n"]
         var modelURL: URL?
         
         for name in modelNames {
+            // Try .mlmodelc first, then .mlpackage
             if let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc") {
                 modelURL = url
-                print("Found model: \(name).mlmodelc")
+                print("✅ Found model: \(name).mlmodelc")
+                break
+            } else if let url = Bundle.main.url(forResource: name, withExtension: "mlpackage") {
+                modelURL = url
+                print("✅ Found model: \(name).mlpackage")
                 break
             }
         }
         
         guard let modelURL = modelURL else {
-            print("YOLO model not found")
+            print("⚠️ YOLO model not found. Place 'CustomObjectDetector.mlpackage' in the project.")
             return
         }
         
@@ -56,17 +62,20 @@ class YOLOObjectDetector: ObjectDetectionProtocol {
             
             visionRequest?.imageCropAndScaleOption = .scaleFill
             
-            print("YOLO model loaded")
-            print("Ready for real-time detection")
+            print("✅ YOLO model loaded successfully")
+            print("🎯 Ready for real-time detection")
             
         } catch {
-            print("Failed to load YOLO model: \(error.localizedDescription)")
+            print("❌ Failed to load YOLO model: \(error.localizedDescription)")
         }
     }
     
     // Process with camera frame sample buffer
     func processARFrame(_ deviceAnchor: DeviceAnchor, cameraSample: CMSampleBuffer? = nil) {
-        guard let request = visionRequest else { return }
+        guard let request = visionRequest else {
+            print("⚠️ YOLO model not loaded. Cannot process frame.")
+            return
+        }
         
         let currentTime = CACurrentMediaTime()
         guard currentTime - lastProcessTime >= processingInterval else { return }
