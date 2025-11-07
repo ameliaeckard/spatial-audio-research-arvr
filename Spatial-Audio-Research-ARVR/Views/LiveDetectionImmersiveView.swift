@@ -21,7 +21,7 @@ struct LiveDetectionImmersiveView: View {
             appModel.rootEntity = rootEntity
         }
         .task {
-            await appModel.startComputerVisionTracking()
+            await appModel.startObjectTracking()
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -31,7 +31,7 @@ struct LiveDetectionImmersiveView: View {
             }
         }
         .onDisappear {
-            appModel.stopComputerVisionDetection()
+            appModel.stopObjectTracking()
         }
     }
 }

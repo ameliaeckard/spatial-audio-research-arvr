@@ -115,13 +115,13 @@ struct LiveDetectionControlPanel: View {
                 Text("Detected Objects")
                     .font(.headline)
                 
-                if appModel.cvDetectedObjects.isEmpty {
+                if appModel.trackedObjects.isEmpty {
                     Text("No objects detected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ForEach(appModel.cvDetectedObjects.prefix(5)) { object in
+                    ForEach(appModel.trackedObjects.prefix(5)) { object in
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(.green)
@@ -142,8 +142,8 @@ struct LiveDetectionControlPanel: View {
                         }
                     }
                     
-                    if appModel.cvDetectedObjects.count > 5 {
-                        Text("+\(appModel.cvDetectedObjects.count - 5) more")
+                    if appModel.trackedObjects.count > 5 {
+                        Text("+\(appModel.trackedObjects.count - 5) more")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
