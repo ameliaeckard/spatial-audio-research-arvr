@@ -1,32 +1,43 @@
 # macOS
 .DS_Store
+.DS_Store?
 .AppleDouble
 .LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
 
-# Xcode
+# Xcode user-specific files
 xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Xcode project - keep project structure but ignore user settings
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
-!*.xcworkspace/contents.xcworkspacedata
 
-# Build directory
+# Xcode workspace - keep workspace structure but ignore user settings  
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+
+# Build directories
 build/
 DerivedData/
+*.build/
 
-# App specific
-*.xcodeproj
-*.xcworkspace
-*.xcuserstate
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
 
 # Fastlane
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
-
-# Swift Package Manager
-.build/
 
 # Local development
 .env
@@ -35,18 +46,7 @@ fastlane/test_output
 # Debug logs
 *.log
 
-# Local configuration files
-*.xcuserdatad/
-
-# User-specific files
+# IDE
+.idea/
 *.swp
 *~
-.idea/
-
-# System Files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-Thumbs.db
