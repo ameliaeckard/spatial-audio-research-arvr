@@ -1,7 +1,7 @@
 //
 //  SpatialAudioManager.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/2/25.
+//  Updated by Amelia Eckard on 11/13/25.
 //
 //  Simplified spatial audio for object detection
 //
@@ -35,11 +35,13 @@ class SpatialAudioManager: @unchecked Sendable {
         let audioSession = AVAudioSession.sharedInstance()
         
         do {
-            // Configure for spatial audio playback
-            try audioSession.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+            // Configure for spatial audio playback on visionOS
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try audioSession.setActive(true)
             
             print("Audio session configured successfully")
+            print("  Category: \(audioSession.category.rawValue)")
+            print("  Mode: \(audioSession.mode.rawValue)")
         } catch {
             print("Failed to configure audio session: \(error)")
         }
@@ -113,11 +115,17 @@ class SpatialAudioManager: @unchecked Sendable {
     }
     
     private func startAudioEngine() {
-        guard let engine = audioEngine, !isEngineRunning else { return }
+        guard let engine = audioEngine, !isEngineRunning else {
+            print("Audio engine already running or not initialized")
+            return
+        }
+        
+        print("Starting audio engine...")
         
         do {
             // Prepare engine before starting
             engine.prepare()
+            print("  Engine prepared")
             
             try engine.start()
             isEngineRunning = true
@@ -141,7 +149,17 @@ class SpatialAudioManager: @unchecked Sendable {
                               listenerOrientation: simd_quatf) {
         
         // Don't process if engine isn't running
-        guard isEngineRunning, let environment = audioEnvironment else { return }
+        guard isEngineRunning, let environment = audioEnvironment else {
+            if !isEngineRunning {
+                print("WARNING: Audio engine not running, cannot play audio")
+            }
+            return
+        }
+        
+        // Debug: Log when we receive objects
+        if objects.count > 0 && Int(CACurrentMediaTime() * 10) % 50 == 0 {
+            print("Audio manager processing \(objects.count) object(s)")
+        }
         
         // Update listener position
         var pos = AVAudio3DPoint()
@@ -179,22 +197,36 @@ class SpatialAudioManager: @unchecked Sendable {
         
         let currentTime = CACurrentMediaTime()
         
-        // Get or create audio player for this object (thread-safe)
         lock.lock()
-        var playerInfo = audioPlayers[object.id]
+        let existingPlayerInfo = audioPlayers[object.id]
+        lock.unlock()
         
         // Store previous position and time for velocity calculation
-        let previousPosition = playerInfo?.lastPosition ?? object.worldPosition
-        let previousTime = playerInfo?.lastUpdateTime ?? currentTime
+        let previousPosition = existingPlayerInfo?.lastPosition ?? object.worldPosition
+        let previousTime = existingPlayerInfo?.lastUpdateTime ?? currentTime
         
-        // Update stored position and time
-        playerInfo?.lastPosition = object.worldPosition
-        playerInfo?.lastUpdateTime = currentTime
+        // Get or create player (createAudioPlayer already adds to dictionary if new)
+        let playerToUse: AVAudioPlayerNode
+        let filter: AVAudioUnitEQ?
         
-        let playerToUse = playerInfo?.player ?? createAudioPlayer(for: object)
-        let filter = playerInfo?.filter
-        
-        lock.unlock()
+        if let existing = existingPlayerInfo {
+            playerToUse = existing.player
+            filter = existing.filter
+            
+            // Update the dictionary with new position and time for existing players
+            lock.lock()
+            audioPlayers[object.id] = (
+                player: playerToUse,
+                filter: existing.filter,
+                lastPosition: object.worldPosition,
+                lastUpdateTime: currentTime
+            )
+            lock.unlock()
+        } else {
+            // Create new player (this already adds to dictionary)
+            playerToUse = createAudioPlayer(for: object)
+            filter = audioPlayers[object.id]?.filter
+        }
         
         // Calculate velocity (m/s)
         let deltaTime = Float(currentTime - previousTime)
@@ -220,7 +252,12 @@ class SpatialAudioManager: @unchecked Sendable {
         let refDistance: Float = 1.0
         let distanceFactor = max(clampedDistance, refDistance)
         let volume = 1.0 / (1.0 + (distanceFactor - refDistance) * 0.8)
-        playerToUse.volume = Float(volume) * 0.3
+        playerToUse.volume = Float(volume) * 0.8 // Increased from 0.3 for better audibility
+        
+        // Debug volume setting
+        if Int(currentTime * 10) % 50 == 0 {
+            print("Audio player volume set to: \(playerToUse.volume) for distance: \(String(format: "%.2f", clampedDistance))m")
+        }
         
         // Apply low-pass filter based on distance (distant sounds have less high frequencies)
         let maxFrequency: Float = 10000.0
@@ -241,7 +278,7 @@ class SpatialAudioManager: @unchecked Sendable {
         }
         
         // Calculate Doppler effect
-        let dopplerFactor = calculateDopplerFactor(objectPosition: object.worldPosition, 
+        let dopplerFactor = calculateDopplerFactor(objectPosition: object.worldPosition,
                                                  objectVelocity: velocity,
                                                  listenerPosition: pos,
                                                  listenerVelocity: .zero)
@@ -289,7 +326,16 @@ class SpatialAudioManager: @unchecked Sendable {
     }
     
     private func playAudioCue(_ frequency: Float, for player: AVAudioPlayerNode) {
-        guard isEngineRunning, player.engine != nil else { return }
+        guard isEngineRunning, player.engine != nil else {
+            print("WARNING: Cannot play audio cue - engine not running or player detached")
+            return
+        }
+        
+        // Debug: Log first few times this is called
+        let currentTime = CACurrentMediaTime()
+        if Int(currentTime * 10) % 100 == 0 {
+            print("Playing audio cue at \(String(format: "%.1f", frequency)) Hz, volume: \(String(format: "%.2f", player.volume))")
+        }
         
         let sampleRate = 44100.0
         let duration = 0.15
@@ -302,7 +348,7 @@ class SpatialAudioManager: @unchecked Sendable {
         
         // Schedule new buffer with precise timing
         let audioTime = player.lastRenderTime ?? AVAudioTime(hostTime: 0)
-        let sampleTime = audioTime.sampleTime ?? 0
+        let sampleTime = audioTime.sampleTime
         let frameCount = AVAudioFramePosition(sampleRate * 0.02) // 20ms from now
         let when = AVAudioTime(sampleTime: sampleTime + frameCount, atRate: sampleRate)
         
@@ -319,9 +365,15 @@ class SpatialAudioManager: @unchecked Sendable {
             }
         }
         
+        // Log buffer scheduling
+        if Int(currentTime * 10) % 100 == 0 {
+            print("Buffer scheduled at \(when.sampleTime), player attached: \(player.engine != nil)")
+        }
+        
         // Start playing if not already playing
         if !player.isPlaying {
             player.play()
+            print("Started audio playback for new player")
         }
     }
     
@@ -331,6 +383,8 @@ class SpatialAudioManager: @unchecked Sendable {
               isEngineRunning else {
             fatalError("Audio engine not initialized or running")
         }
+        
+        print("Creating audio player for object: \(object.label) at distance \(String(format: "%.2f", object.distance))m")
         
         // Create player node
         let player = AVAudioPlayerNode()
@@ -404,9 +458,13 @@ class SpatialAudioManager: @unchecked Sendable {
             let harmonic2 = 0.1 * sin(3.0 * omega * Double(frame))
             
             // Combine with noise for texture
-            let noise = (Float.random(in: -1...1) * 0.02)
+            let noise = Float.random(in: -1...1) * 0.02
             
-            let value = Float(base + harmonic1 + harmonic2 + noise) * amplitude * Float(envelope)
+            // Break down complex expression for compiler
+            let combinedSignal = base + harmonic1 + harmonic2
+            let signalWithNoise = Float(combinedSignal) + noise
+            let envelopedSignal = signalWithNoise * Float(envelope)
+            let value = envelopedSignal * amplitude
             
             // Apply panning based on position (subtle stereo effect)
             let pan = Float(sin(omega * 0.1 * t) * 0.3) // Slow panning effect
@@ -420,18 +478,23 @@ class SpatialAudioManager: @unchecked Sendable {
     
     private func removeAudioPlayer(id: UUID) {
         lock.lock()
-        let player = audioPlayers[id]
+        let playerInfo = audioPlayers[id]
         audioPlayers.removeValue(forKey: id)
         lock.unlock()
         
-        guard let player = player else { return }
+        guard let playerInfo = playerInfo else { return }
         
         // Stop playback
-        player.stop()
+        playerInfo.player.stop()
         
         // Detach from engine
-        if let engine = audioEngine, engine.attachedNodes.contains(player) {
-            engine.detach(player)
+        if let engine = audioEngine {
+            if engine.attachedNodes.contains(playerInfo.player) {
+                engine.detach(playerInfo.player)
+            }
+            if engine.attachedNodes.contains(playerInfo.filter) {
+                engine.detach(playerInfo.filter)
+            }
         }
     }
     

@@ -1,9 +1,9 @@
 //
 //  ReferenceObjectLoader.swift
 //  Spatial-Audio-Research-ARVR
-//  Created by Amelia Eckard on 11/6/25.
+//  Created by Amelia Eckard on 11/13/25.
 //
-//  Loads .arobject files from the app bundle
+//  Loads .referenceobject files from the app bundle
 //
 
 import ARKit
@@ -22,30 +22,20 @@ class ReferenceObjectLoader {
             return
         }
         
-        let fileManager = FileManager.default
+        // Load specific reference object: Box.referenceobject
+        let filename = "Box.referenceobject"
+        let fullPath = (resourcePath as NSString).appendingPathComponent(filename)
+        let url = URL(fileURLWithPath: fullPath)
         
         do {
-            let files = try fileManager.contentsOfDirectory(atPath: resourcePath)
-            
-            for filename in files where filename.hasSuffix(".arobject") {
-                let fullPath = (resourcePath as NSString).appendingPathComponent(filename)
-                let url = URL(fileURLWithPath: fullPath)
-                
-                // ReferenceObject(from:) is async
-                if let referenceObject = try? await ReferenceObject(from: url) {
-                    referenceObjects.append(referenceObject)
-                    print("Loaded reference object: \(filename)")
-                }
-            }
-            
-            if referenceObjects.isEmpty {
-                print("No .arobject files found")
-            } else {
-                print("Loaded \(referenceObjects.count) reference object(s)")
-            }
+            // ReferenceObject(from:) is async
+            let referenceObject = try await ReferenceObject(from: url)
+            referenceObjects.append(referenceObject)
+            print("Loaded reference object: \(filename)")
             
         } catch {
-            print("Error loading reference objects: \(error)")
+            print("Error loading Box.referenceobject: \(error)")
+            print("Make sure Box.referenceobject is added to your Xcode project")
         }
     }
 }

@@ -24,7 +24,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		8715FD672EB93EBD00EFAF42 /* Exceptions for "Spatial-Audio-Research-ARVR" folder in "Spatial-Audio-Research-ARVR" target */ = {
+		87C5C6692EC689CC008627D9 /* Exceptions for "Spatial-Audio-Research-ARVR" folder in "Spatial-Audio-Research-ARVR" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -37,7 +37,7 @@
 		87EAFADF2EA1BBA900ACA57A /* Spatial-Audio-Research-ARVR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				8715FD672EB93EBD00EFAF42 /* Exceptions for "Spatial-Audio-Research-ARVR" folder in "Spatial-Audio-Research-ARVR" target */,
+				87C5C6692EC689CC008627D9 /* Exceptions for "Spatial-Audio-Research-ARVR" folder in "Spatial-Audio-Research-ARVR" target */,
 			);
 			path = "Spatial-Audio-Research-ARVR";
 			sourceTree = "<group>";

@@ -1,7 +1,7 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/6/25.
+//  Updated by Amelia Eckard on 11/13/25.
 //
 //  Uses ObjectTrackingProvider for visionOS compatibility
 //
@@ -22,32 +22,24 @@ class AppModel {
     }
     
     enum DetectionObject: String, CaseIterable {
-        case mug = "Mug"
-        case waterBottle = "Water Bottle"
-        case chair = "Chair"
+        case box = "Box"
 
         var icon: String {
             switch self {
-            case .mug: return "cup.and.saucer.fill"
-            case .waterBottle: return "waterbottle.fill"
-            case .chair: return "chair.fill"
+            case .box: return "shippingbox.fill"
             }
         }
         
         var color: Color {
             switch self {
-            case .mug: return .brown
-            case .waterBottle: return .blue
-            case .chair: return .orange
+            case .box: return .green
             }
         }
         
-        // Expected names for .arobject files
+        // Expected names for .referenceobject files
         var referenceObjectName: String {
             switch self {
-            case .mug: return "mug"
-            case .waterBottle: return "water_bottle"
-            case .chair: return "chair"
+            case .box: return "Box"
             }
         }
     }
@@ -166,7 +158,7 @@ class AppModel {
         // Check if we have reference objects
         if referenceObjects.isEmpty {
             print("No reference objects available - cannot start tracking")
-            print("Add .arobject files to your project to enable detection")
+            print("Add .referenceobject files to your project to enable detection")
             return
         }
         
@@ -217,12 +209,18 @@ class AppModel {
             switch anchorUpdate.event {
             case .added:
                 let objectName = anchor.referenceObject.name
-                print("Object detected: \(objectName)")
+                print("Object detected: \(objectName) [ID: \(id)]")
                 
-                // Create visualization
-                let visualization = ObjectAnchorVisualization(for: anchor)
-                objectVisualizations[id] = visualization
-                rootEntity.addChild(visualization.entity)
+                // Only create visualization if one doesn't already exist
+                if objectVisualizations[id] == nil {
+                    let visualization = ObjectAnchorVisualization(for: anchor)
+                    objectVisualizations[id] = visualization
+                    rootEntity.addChild(visualization.entity)
+                    print("Created visualization for \(objectName)")
+                } else {
+                    print("Visualization already exists for \(id), updating instead")
+                    objectVisualizations[id]?.update(with: anchor)
+                }
                 
                 // Update tracked objects list
                 updateTrackedObjectsList()
@@ -233,9 +231,15 @@ class AppModel {
                 
             case .removed:
                 let objectName = anchor.referenceObject.name
-                print("Object lost: \(objectName)")
-                objectVisualizations[id]?.entity.removeFromParent()
-                objectVisualizations.removeValue(forKey: id)
+                print("Object lost: \(objectName) [ID: \(id)]")
+                
+                // Remove visualization
+                if let visualization = objectVisualizations[id] {
+                    visualization.entity.removeFromParent()
+                    objectVisualizations.removeValue(forKey: id)
+                    print("Removed visualization for \(objectName)")
+                }
+                
                 updateTrackedObjectsList()
             }
         }
@@ -281,6 +285,8 @@ class AppModel {
     }
     
     private func updateAudioLoop() async {
+        print("🔊 Audio loop started")
+        
         while isTracking {
             guard let worldTrackingProvider = worldTrackingProvider,
                   let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
@@ -297,6 +303,11 @@ class AppModel {
             
             let rotation = simd_quatf(cameraTransform)
             
+            // Only log occasionally to avoid spam
+            if trackedObjects.count > 0 && Int(CACurrentMediaTime() * 10) % 50 == 0 {
+                print("Updating audio for \(trackedObjects.count) object(s)")
+            }
+            
             audioManager.updateAudioForObjects(
                 trackedObjects,
                 listenerPosition: cameraPosition,
@@ -305,6 +316,8 @@ class AppModel {
             
             try? await Task.sleep(for: .milliseconds(200))
         }
+        
+        print("Audio loop stopped")
     }
     
     private func updateBoundingBoxes() {
@@ -381,8 +394,8 @@ class ObjectAnchorVisualization {
         
         entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
         
-        // Create wireframe visualization
-        let mesh = MeshResource.generateBox(size: [0.3, 0.3, 0.3])
+        // Create wireframe visualization - smaller box
+        let mesh = MeshResource.generateBox(size: [0.15, 0.15, 0.15])
         var material = UnlitMaterial()
         material.color = .init(tint: .cyan.withAlphaComponent(0.5))
         
