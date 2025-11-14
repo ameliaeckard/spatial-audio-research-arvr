@@ -1,15 +1,15 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/13/25.
-//
-//  Uses ObjectTrackingProvider for visionOS compatibility
+//  Updated by Amelia Eckard on 11/14/25.
 //
 
 import ARKit
 import RealityKit
 import SwiftUI
 import QuartzCore
+import AVFoundation
+import CoreGraphics
 
 @MainActor
 @Observable
@@ -36,15 +36,12 @@ class AppModel {
             }
         }
         
-        // Expected names for .referenceobject files
         var referenceObjectName: String {
             switch self {
             case .box: return "Box"
             }
         }
     }
-    
-    // MARK: - State Properties
     
     var immersiveSpaceState = ImmersiveSpaceState.closed {
         didSet {
@@ -60,18 +57,14 @@ class AppModel {
     var providersStoppedWithError = false
     var detectedObjects: [DetectionObject: Bool] = [:]
     
-    // Object tracking
-    var audioManager = SpatialAudioManager()
     var isTracking = false
     var trackedObjects: [DetectedObject] = []
     var boundingBoxes: [UUID: BoundingBoxEntity] = [:]
     var rootEntity: Entity?
-    var objectVisualizations: [UUID: ObjectAnchorVisualization] = [:]
+    var currentVisualization: ObjectAnchorVisualization? = nil
     
-    // Reference objects
+    private let audioManager = SpatialAudioManager()
     private let referenceObjectLoader = ReferenceObjectLoader()
-    
-    // MARK: - Computed Properties
     
     var allRequiredAuthorizationsAreGranted: Bool {
         worldSensingAuthorizationStatus == .allowed
@@ -89,20 +82,14 @@ class AppModel {
         objectTrackingProvider?.state == .running
     }
     
-    // MARK: - Private Properties
-    
     private var arkitSession = ARKitSession()
     private var objectTrackingProvider: ObjectTrackingProvider?
     private var worldTrackingProvider: WorldTrackingProvider?
     private var worldSensingAuthorizationStatus = ARKitSession.AuthorizationStatus.notDetermined
     
-    // MARK: - Initialization
-    
     init() {
         print("Object Tracking initialized")
     }
-    
-    // MARK: - Session Management
     
     func monitorSessionEvents() async {
         for await event in arkitSession.events {
@@ -145,24 +132,21 @@ class AppModel {
         }
     }
     
-    // MARK: - Object Tracking
-    
     func startObjectTracking() async {
         guard !isTracking else { return }
         
-        // Load reference objects first
+        print("Starting object tracking")
+        
         await referenceObjectLoader.loadReferenceObjects()
         
         let referenceObjects = referenceObjectLoader.referenceObjects
         
-        // Check if we have reference objects
         if referenceObjects.isEmpty {
             print("No reference objects available - cannot start tracking")
-            print("Add .referenceobject files to your project to enable detection")
             return
         }
         
-        print("🔍 Starting object tracking with \(referenceObjects.count) reference object(s)")
+        print("Starting object tracking with \(referenceObjects.count) reference object(s)")
         
         let objectTrackingProvider = ObjectTrackingProvider(referenceObjects: referenceObjects)
         let worldTrackingProvider = WorldTrackingProvider()
@@ -177,7 +161,6 @@ class AppModel {
             return
         }
         
-        // Wait for provider to be ready
         while objectTrackingProvider.state != .running {
             try? await Task.sleep(for: .milliseconds(100))
         }
@@ -185,13 +168,12 @@ class AppModel {
         print("Object tracking active")
         isTracking = true
         
-        // Start processing loops
         Task {
             await processObjectUpdates()
         }
         
         Task {
-            await updateAudioLoop()
+            await updateListenerPositionLoop()
         }
     }
     
@@ -204,39 +186,34 @@ class AppModel {
         
         for await anchorUpdate in objectTrackingProvider.anchorUpdates {
             let anchor = anchorUpdate.anchor
-            let id = anchor.id
+            let objectName = anchor.referenceObject.name
             
             switch anchorUpdate.event {
             case .added:
-                let objectName = anchor.referenceObject.name
-                print("Object detected: \(objectName) [ID: \(id)]")
+                print("Object detected: \(objectName)")
                 
-                // Only create visualization if one doesn't already exist
-                if objectVisualizations[id] == nil {
-                    let visualization = ObjectAnchorVisualization(for: anchor)
-                    objectVisualizations[id] = visualization
-                    rootEntity.addChild(visualization.entity)
-                    print("Created visualization for \(objectName)")
-                } else {
-                    print("Visualization already exists for \(id), updating instead")
-                    objectVisualizations[id]?.update(with: anchor)
+                if let oldViz = currentVisualization {
+                    oldViz.entity.removeFromParent()
+                    print("Removed previous visualization")
                 }
                 
-                // Update tracked objects list
+                let visualization = ObjectAnchorVisualization(for: anchor)
+                currentVisualization = visualization
+                rootEntity.addChild(visualization.entity)
+                print("Created visualization for \(objectName)")
+                
                 updateTrackedObjectsList()
                 
             case .updated:
-                objectVisualizations[id]?.update(with: anchor)
+                currentVisualization?.update(with: anchor)
                 updateTrackedObjectsList()
                 
             case .removed:
-                let objectName = anchor.referenceObject.name
-                print("Object lost: \(objectName) [ID: \(id)]")
+                print("Object lost: \(objectName)")
                 
-                // Remove visualization
-                if let visualization = objectVisualizations[id] {
-                    visualization.entity.removeFromParent()
-                    objectVisualizations.removeValue(forKey: id)
+                if let viz = currentVisualization {
+                    viz.entity.removeFromParent()
+                    currentVisualization = nil
                     print("Removed visualization for \(objectName)")
                 }
                 
@@ -245,79 +222,70 @@ class AppModel {
         }
     }
     
+    private func updateListenerPositionLoop() async {
+        guard let worldTrackingProvider = worldTrackingProvider else {
+            print("Missing world tracking provider")
+            return
+        }
+        
+        while isTracking {
+            guard let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
+                try? await Task.sleep(for: .milliseconds(50))
+                continue
+            }
+            
+            let transform = deviceAnchor.originFromAnchorTransform
+            let position = SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+            
+            let rotation = simd_quatf(transform)
+            
+            audioManager.updateAudioForObjects(
+                trackedObjects,
+                listenerPosition: position,
+                listenerOrientation: rotation
+            )
+            
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+    
     private func updateTrackedObjectsList() {
+        guard let viz = currentVisualization else {
+            trackedObjects.removeAll()
+            updateDetectionStatus()
+            updateBoundingBoxes()
+            return
+        }
+        
+        let worldPos = viz.entity.position(relativeTo: nil)
+        
         guard let worldTrackingProvider = worldTrackingProvider,
               let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
             return
         }
         
-        let cameraTransform = deviceAnchor.originFromAnchorTransform
-        let cameraPosition = SIMD3<Float>(
-            cameraTransform.columns.3.x,
-            cameraTransform.columns.3.y,
-            cameraTransform.columns.3.z
+        let deviceTransform = deviceAnchor.originFromAnchorTransform
+        let devicePosition = SIMD3<Float>(
+            deviceTransform.columns.3.x,
+            deviceTransform.columns.3.y,
+            deviceTransform.columns.3.z
         )
         
-        var newTrackedObjects: [DetectedObject] = []
+        let distance = simd_distance(worldPos, devicePosition)
+        let direction = normalize(worldPos - devicePosition)
         
-        for (_, visualization) in objectVisualizations {
-            let objectPosition = visualization.position
-            let distance = simd_distance(objectPosition, cameraPosition)
-            let direction = normalize(objectPosition - cameraPosition)
-            
-            let label = visualization.label
-            
-            let detectedObject = DetectedObject(
-                label: label,
-                confidence: 1.0, // ObjectTracking is always confident when it finds a match
-                worldPosition: objectPosition,
-                boundingBox: CGRect(x: 0.5, y: 0.5, width: 0.2, height: 0.2),
-                distance: distance,
-                direction: direction
-            )
-            
-            newTrackedObjects.append(detectedObject)
-        }
+        let detected = DetectedObject(
+            label: viz.label,
+            confidence: 1.0,
+            worldPosition: worldPos,
+            boundingBox: CGRect(x: 0.5, y: 0.5, width: 0.2, height: 0.2),
+            distance: distance,
+            direction: direction
+        )
         
-        trackedObjects = newTrackedObjects
+        trackedObjects = [detected]
         updateDetectionStatus()
         updateBoundingBoxes()
-    }
-    
-    private func updateAudioLoop() async {
-        print("🔊 Audio loop started")
-        
-        while isTracking {
-            guard let worldTrackingProvider = worldTrackingProvider,
-                  let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
-                try? await Task.sleep(for: .milliseconds(100))
-                continue
-            }
-            
-            let cameraTransform = deviceAnchor.originFromAnchorTransform
-            let cameraPosition = SIMD3<Float>(
-                cameraTransform.columns.3.x,
-                cameraTransform.columns.3.y,
-                cameraTransform.columns.3.z
-            )
-            
-            let rotation = simd_quatf(cameraTransform)
-            
-            // Only log occasionally to avoid spam
-            if trackedObjects.count > 0 && Int(CACurrentMediaTime() * 10) % 50 == 0 {
-                print("Updating audio for \(trackedObjects.count) object(s)")
-            }
-            
-            audioManager.updateAudioForObjects(
-                trackedObjects,
-                listenerPosition: cameraPosition,
-                listenerOrientation: rotation
-            )
-            
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        
-        print("Audio loop stopped")
     }
     
     private func updateBoundingBoxes() {
@@ -325,13 +293,11 @@ class AppModel {
         
         let currentObjectIds = Set(trackedObjects.map { $0.id })
         
-        // Remove old boxes
         for (id, box) in boundingBoxes where !currentObjectIds.contains(id) {
             box.removeFromParent()
             boundingBoxes.removeValue(forKey: id)
         }
         
-        // Update or create boxes
         for object in trackedObjects {
             if let existingBox = boundingBoxes[object.id] {
                 existingBox.update(with: object)
@@ -359,24 +325,23 @@ class AppModel {
         print("Stopping object tracking")
         
         isTracking = false
-        audioManager.stop()
         trackedObjects.removeAll()
         
-        // Clean up bounding boxes
         for (_, box) in boundingBoxes {
             box.removeFromParent()
         }
         boundingBoxes.removeAll()
         
-        // Clean up visualizations
-        for (_, visualization) in objectVisualizations {
-            visualization.entity.removeFromParent()
+        if let viz = currentVisualization {
+            viz.entity.removeFromParent()
+            currentVisualization = nil
         }
-        objectVisualizations.removeAll()
+        
+        audioManager.stop()
+        
+        print("Object tracking stopped and cleaned up")
     }
 }
-
-// MARK: - Object Anchor Visualization
 
 class ObjectAnchorVisualization {
     let entity: Entity
@@ -394,7 +359,6 @@ class ObjectAnchorVisualization {
         
         entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
         
-        // Create wireframe visualization - smaller box
         let mesh = MeshResource.generateBox(size: [0.15, 0.15, 0.15])
         var material = UnlitMaterial()
         material.color = .init(tint: .cyan.withAlphaComponent(0.5))
