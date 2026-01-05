@@ -186,17 +186,24 @@ class SpatialAudioManager: @unchecked Sendable {
         let frequency = maxFreq - (normalizedDistance * (maxFreq - minFreq))
         
         // Generate tone
-        let buffer = generateTone(frequency: Double(frequency), duration: 0.2, sampleRate: 44100.0)
-        
+        guard let buffer = generateTone(frequency: Double(frequency), duration: 0.2, sampleRate: 44100.0) else {
+            print("ERROR: Failed to generate tone, retrying in 2 seconds")
+            // Retry after delay if buffer generation fails
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.scheduleNextBeep(for: objectId)
+            }
+            return
+        }
+
         player.scheduleBuffer(buffer, at: nil, options: []) { [weak self] in
             guard let self = self else { return }
-            
+
             // Wait 2 seconds between beeps
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.scheduleNextBeep(for: objectId)
             }
         }
-        
+
         if !player.isPlaying {
             player.play()
         }
@@ -226,12 +233,17 @@ class SpatialAudioManager: @unchecked Sendable {
         return player
     }
     
-    private func generateTone(frequency: Double, duration: Double, sampleRate: Double) -> AVAudioPCMBuffer {
+    private func generateTone(frequency: Double, duration: Double, sampleRate: Double) -> AVAudioPCMBuffer? {
         let frameCount = UInt32(duration * sampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
-        
+
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
+            print("ERROR: Failed to create audio format")
+            return nil
+        }
+
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            fatalError("Failed to create audio buffer")
+            print("ERROR: Failed to create audio buffer")
+            return nil
         }
         
         buffer.frameLength = frameCount
