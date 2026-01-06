@@ -15,6 +15,17 @@ struct MainMenuView: View {
     @Environment(AppModel.self) private var appModel
     
     var body: some View {
+        ZStack {
+            // Hide content when immersive space is open or in transition
+            if appModel.immersiveSpaceState == .closed {
+                mainMenuContent
+            } else {
+                Color.clear
+            }
+        }
+    }
+
+    private var mainMenuContent: some View {
         VStack(spacing: 40) {
             VStack(spacing: 16) {
                 Text("Hello, User")
@@ -44,35 +55,39 @@ struct MainMenuView: View {
                                 print("Immersive space is already open or in transition")
                                 return
                             }
-                            
+
                             appModel.immersiveSpaceState = .inTransition
-                            
+                            print("Closing main menu...")
+
                             // Close main menu FIRST
                             dismissWindow(id: "main-menu")
-                            
-                            // Small delay for smooth transition
-                            try? await Task.sleep(for: .milliseconds(200))
-                            
+
+                            // Longer delay to ensure window closes before opening immersive space
+                            try? await Task.sleep(for: .milliseconds(500))
+
                             // Open immersive space
+                            print("Opening immersive space...")
                             switch await openImmersiveSpace(id: "live-detection") {
                             case .opened:
-                                print("Immersive space opened successfully")
-                                
-                                // CRITICAL FIX: Open the control panel window
-                                try? await Task.sleep(for: .milliseconds(300))
+                                print("✓ Immersive space opened successfully")
+
+                                // Open the control panel window
+                                try? await Task.sleep(for: .milliseconds(400))
+                                print("Opening control panel...")
                                 openWindow(id: "live-detection-controls")
-                                print("Control panel opened")
-                                
+                                print("✓ Control panel opened")
+
                             case .error, .userCancelled:
-                                print("Failed to open immersive space")
+                                print("ERROR: Failed to open immersive space")
                                 appModel.immersiveSpaceState = .closed
                                 // Reopen main menu if failed
-                                try? await Task.sleep(for: .milliseconds(200))
+                                try? await Task.sleep(for: .milliseconds(300))
                                 openWindow(id: "main-menu")
-                                
+
                             @unknown default:
+                                print("ERROR: Unknown immersive space result")
                                 appModel.immersiveSpaceState = .closed
-                                try? await Task.sleep(for: .milliseconds(200))
+                                try? await Task.sleep(for: .milliseconds(300))
                                 openWindow(id: "main-menu")
                             }
                         }

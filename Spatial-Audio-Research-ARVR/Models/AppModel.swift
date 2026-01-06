@@ -1,7 +1,7 @@
 //
 //  AppModel.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/14/25.
+//  Updated by Amelia Eckard on 1/6/26.
 //
 
 import ARKit
@@ -62,8 +62,9 @@ class AppModel {
     var boundingBoxes: [UUID: BoundingBoxEntity] = [:]
     var rootEntity: Entity?
     var currentVisualization: ObjectAnchorVisualization? = nil
-    
-    private let audioManager = SpatialAudioManager()
+
+    // Disabled - using entity-based audio instead
+    // private let audioManager = SpatialAudioManager()
     private let referenceObjectLoader = ReferenceObjectLoader()
     
     var allRequiredAuthorizationsAreGranted: Bool {
@@ -134,9 +135,11 @@ class AppModel {
     
     func startObjectTracking() async {
         guard !isTracking else { return }
-        
+
         print("Starting object tracking")
-        
+
+        // Audio now handled by entity-based audio in ObjectAnchorVisualization
+
         await referenceObjectLoader.loadReferenceObjects()
         
         let referenceObjects = referenceObjectLoader.referenceObjects
@@ -183,7 +186,9 @@ class AppModel {
             print("Missing provider or root entity")
             return
         }
-        
+
+        print("Starting to monitor for object anchor updates...")
+
         for await anchorUpdate in objectTrackingProvider.anchorUpdates {
             let anchor = anchorUpdate.anchor
             let objectName = anchor.referenceObject.name
@@ -191,17 +196,19 @@ class AppModel {
             switch anchorUpdate.event {
             case .added:
                 print("Object detected: \(objectName)")
-                
-                if let oldViz = currentVisualization {
-                    oldViz.entity.removeFromParent()
-                    print("Removed previous visualization")
+
+                // If we already have a visualization, just update it instead of recreating
+                // This preserves the UUID and prevents audio player recreation
+                if let existingViz = currentVisualization {
+                    print("Updating existing visualization instead of recreating")
+                    existingViz.update(with: anchor)
+                } else {
+                    let visualization = ObjectAnchorVisualization(for: anchor)
+                    currentVisualization = visualization
+                    rootEntity.addChild(visualization.entity)
+                    print("Created visualization for \(objectName)")
                 }
-                
-                let visualization = ObjectAnchorVisualization(for: anchor)
-                currentVisualization = visualization
-                rootEntity.addChild(visualization.entity)
-                print("Created visualization for \(objectName)")
-                
+
                 updateTrackedObjectsList()
                 
             case .updated:
@@ -227,24 +234,28 @@ class AppModel {
             print("Missing world tracking provider")
             return
         }
-        
+
+        var debugCounter = 0
         while isTracking {
             guard let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
                 try? await Task.sleep(for: .milliseconds(50))
                 continue
             }
-            
+
             let transform = deviceAnchor.originFromAnchorTransform
             let position = SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
-            
-            let rotation = simd_quatf(transform)
-            
-            audioManager.updateAudioForObjects(
-                trackedObjects,
-                listenerPosition: position,
-                listenerOrientation: rotation
-            )
-            
+
+            // Debug logging every 2 seconds
+            if debugCounter % 40 == 0 && !trackedObjects.isEmpty {
+                print("Listener (head) position: (\(String(format: "%.2f", position.x)), \(String(format: "%.2f", position.y)), \(String(format: "%.2f", position.z)))")
+                for obj in trackedObjects {
+                    print("   Object '\(obj.label)' at: (\(String(format: "%.2f", obj.worldPosition.x)), \(String(format: "%.2f", obj.worldPosition.y)), \(String(format: "%.2f", obj.worldPosition.z))) - Distance: \(String(format: "%.2f", obj.distance))m")
+                }
+            }
+            debugCounter += 1
+
+            // Audio handled by entity-based audio (no manual updates needed)
+
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
@@ -256,7 +267,7 @@ class AppModel {
             updateBoundingBoxes()
             return
         }
-        
+
         let worldPos = viz.entity.position(relativeTo: nil)
         
         guard let worldTrackingProvider = worldTrackingProvider,
@@ -274,7 +285,9 @@ class AppModel {
         let distance = simd_distance(worldPos, devicePosition)
         let direction = normalize(worldPos - devicePosition)
         
+        // Use the stable UUID from the visualization instead of creating a new one
         let detected = DetectedObject(
+            id: viz.detectedObjectId,
             label: viz.label,
             confidence: 1.0,
             worldPosition: worldPos,
@@ -336,9 +349,9 @@ class AppModel {
             viz.entity.removeFromParent()
             currentVisualization = nil
         }
-        
-        audioManager.stop()
-        
+
+        // Audio stops automatically when entity is removed (deinit)
+
         print("Object tracking stopped and cleaned up")
     }
 }
@@ -347,7 +360,11 @@ class ObjectAnchorVisualization {
     let entity: Entity
     let label: String
     var position: SIMD3<Float>
-    
+    let detectedObjectId: UUID  // Stable ID for this visualization
+    private var audioPlaybackController: AudioPlaybackController?
+    private var beepTimer: Timer?
+    private static var cachedBeepResource: AudioFileResource?  // Cache audio resource globally
+
     init(for anchor: ObjectAnchor) {
         self.entity = Entity()
         self.label = anchor.referenceObject.name
@@ -356,24 +373,142 @@ class ObjectAnchorVisualization {
             anchor.originFromAnchorTransform.columns.3.y,
             anchor.originFromAnchorTransform.columns.3.z
         )
-        
+        self.detectedObjectId = UUID()  // Create stable ID once
+
         entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
-        
+
         let mesh = MeshResource.generateBox(size: [0.15, 0.15, 0.15])
         var material = UnlitMaterial()
         material.color = .init(tint: .cyan.withAlphaComponent(0.5))
-        
+
         let modelEntity = ModelEntity(mesh: mesh, materials: [material])
         entity.addChild(modelEntity)
+
+        // Setup spatial audio on the entity
+        setupEntityAudio()
     }
-    
+
+    private func setupEntityAudio() {
+        // Add spatial audio component
+        entity.components.set(SpatialAudioComponent())
+
+        // Load and play audio
+        Task { @MainActor in
+            do {
+                // Use cached resource if available, otherwise generate it once
+                if Self.cachedBeepResource == nil {
+                    print("Generating beep audio (one-time)...")
+                    let beepURL = try await generateBeepFile()
+                    Self.cachedBeepResource = try await AudioFileResource(contentsOf: beepURL)
+                    print("Audio cached")
+                }
+
+                guard let resource = Self.cachedBeepResource else { return }
+
+                // Start playing in a loop
+                startBeepLoop(with: resource)
+
+            } catch {
+                print("Audio setup failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func generateBeepFile() async throws -> URL {
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let frequency = 800.0
+                    let duration = 0.15
+                    let sampleRate = 44100.0
+                    let frameCount = UInt32(duration * sampleRate)
+
+                    guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+                        throw NSError(domain: "AudioGen", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create audio format"])
+                    }
+
+                    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+                        throw NSError(domain: "AudioGen", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create buffer"])
+                    }
+
+                    buffer.frameLength = frameCount
+
+                    guard let channelData = buffer.floatChannelData?[0] else {
+                        throw NSError(domain: "AudioGen", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to get channel data"])
+                    }
+
+                    // Generate sine wave
+                    let angularFrequency = 2.0 * Double.pi * frequency
+                    for frame in 0..<Int(frameCount) {
+                        let time = Double(frame) / sampleRate
+                        let sample = Float(sin(angularFrequency * time))
+
+                        // Apply fade in/out
+                        let fadeFrames = Int(sampleRate * 0.01)
+                        var amplitude: Float = 1.0
+                        if frame < fadeFrames {
+                            amplitude = Float(frame) / Float(fadeFrames)
+                        } else if frame > Int(frameCount) - fadeFrames {
+                            amplitude = Float(Int(frameCount) - frame) / Float(fadeFrames)
+                        }
+
+                        channelData[frame] = sample * amplitude * 0.5
+                    }
+
+                    // Save to file (use fixed name for caching)
+                    let tempDir = FileManager.default.temporaryDirectory
+                    let fileURL = tempDir.appendingPathComponent("spatial_beep.caf")
+
+                    // Remove existing file if present
+                    try? FileManager.default.removeItem(at: fileURL)
+
+                    let audioFile = try AVAudioFile(forWriting: fileURL,
+                                                   settings: format.settings,
+                                                   commonFormat: .pcmFormatFloat32,
+                                                   interleaved: false)
+
+                    try audioFile.write(from: buffer)
+
+                    continuation.resume(returning: fileURL)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func startBeepLoop(with resource: AudioFileResource) {
+        print("Beep loop started")
+
+        // Play immediately
+        playBeep(with: resource)
+
+        // Setup timer for continuous beeping
+        DispatchQueue.main.async {
+            self.beepTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.playBeep(with: resource)
+            }
+        }
+    }
+
+    private func playBeep(with resource: AudioFileResource) {
+        audioPlaybackController = entity.playAudio(resource)
+        // Removed excessive logging - audio plays automatically
+    }
+
     func update(with anchor: ObjectAnchor) {
         entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
-        
+
         self.position = SIMD3<Float>(
             anchor.originFromAnchorTransform.columns.3.x,
             anchor.originFromAnchorTransform.columns.3.y,
             anchor.originFromAnchorTransform.columns.3.z
         )
+    }
+
+    deinit {
+        beepTimer?.invalidate()
+        audioPlaybackController?.stop()
+        print("Audio cleanup complete")
     }
 }

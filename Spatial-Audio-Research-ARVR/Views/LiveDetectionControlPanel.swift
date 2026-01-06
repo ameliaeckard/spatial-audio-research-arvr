@@ -156,21 +156,27 @@ struct LiveDetectionControlPanel: View {
             // Exit Button
             Button {
                 Task {
+                    print("Exiting live detection...")
+
                     // Close control panel FIRST
                     dismissWindow(id: "live-detection-controls")
-                    
+                    print("✓ Control panel closed")
+
                     // Small delay
-                    try? await Task.sleep(for: .milliseconds(200))
-                    
-                    // Dismiss immersive space
-                    await dismissImmersiveSpace()
-                    
-                    // Wait for immersive space to fully close
                     try? await Task.sleep(for: .milliseconds(300))
-                    
+
+                    // Dismiss immersive space
+                    print("Closing immersive space...")
+                    await dismissImmersiveSpace()
+                    print("✓ Immersive space closed")
+
+                    // Wait for immersive space to fully close
+                    try? await Task.sleep(for: .milliseconds(400))
+
                     // Reopen main menu
+                    print("Opening main menu...")
                     openWindow(id: "main-menu")
-                    print("Returned to main menu")
+                    print("✓ Returned to main menu")
                 }
             } label: {
                 HStack {

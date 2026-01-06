@@ -19,9 +19,6 @@ struct SpatialAudioApp: App {
         }
         .defaultSize(width: 800, height: 600)
         .windowResizability(.contentSize)
-        .defaultWindowPlacement { content, context in
-            return WindowPlacement(.utilityPanel)
-        }
         
         ImmersiveSpace(id: "live-detection") {
             LiveDetectionImmersiveView()

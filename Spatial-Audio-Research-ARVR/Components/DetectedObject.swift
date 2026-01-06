@@ -10,7 +10,7 @@ import Foundation
 import RealityKit
 
 struct DetectedObject: Identifiable {
-    let id = UUID()
+    let id: UUID
     let label: String
     let confidence: Float
     let worldPosition: SIMD3<Float>

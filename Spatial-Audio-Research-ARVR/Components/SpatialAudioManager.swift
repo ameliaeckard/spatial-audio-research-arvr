@@ -1,7 +1,7 @@
 //
 //  SpatialAudioManager.swift
 //  Spatial-Audio-Research-ARVR
-//  Updated by Amelia Eckard on 11/14/25.
+//  Updated by Amelia Eckard on 1/6/26.
 //
 
 import AVFoundation
@@ -30,6 +30,7 @@ class SpatialAudioManager: @unchecked Sendable {
     
     private var isEngineRunning = false
     private let lock = NSLock()
+    private var debugCounter = 0
     
     init() {
         setupAudioSession()
@@ -101,14 +102,20 @@ class SpatialAudioManager: @unchecked Sendable {
     func updateAudioForObjects(_ objects: [DetectedObject],
                               listenerPosition: SIMD3<Float>,
                               listenerOrientation: simd_quatf) {
-        
+
         guard isEngineRunning, let environment = audioEnvironment else {
             print("ERROR: Cannot update audio - engine not running")
             return
         }
-        
+
         environment.listenerPosition = AVAudio3DPoint(x: listenerPosition.x, y: listenerPosition.y, z: listenerPosition.z)
-        
+
+        // Debug logging every 2 seconds (40 updates at 50ms)
+        debugCounter += 1
+        if debugCounter % 40 == 0 {
+            print("AUDIO UPDATE - Listener at: (\(String(format: "%.2f", listenerPosition.x)), \(String(format: "%.2f", listenerPosition.y)), \(String(format: "%.2f", listenerPosition.z)))")
+        }
+
         let euler = listenerOrientation.eulerAngles
         environment.listenerAngularOrientation = AVAudio3DAngularOrientation(yaw: euler.y, pitch: euler.x, roll: euler.z)
         
@@ -129,26 +136,31 @@ class SpatialAudioManager: @unchecked Sendable {
     
     private func updateAudioForObject(_ object: DetectedObject) {
         guard isEngineRunning else { return }
-        
+
         lock.lock()
         var player = audioPlayers[object.id]
         let needsCreate = (player == nil)
         let alreadyBeeping = activeBeepLoops.contains(object.id)
-        
+
         // Store/update object info for frequency calculation
         objectInfo[object.id] = ObjectInfo(distance: object.distance, worldPosition: object.worldPosition)
         lock.unlock()
-        
+
         if needsCreate {
             player = createAudioPlayer(for: object)
-            print("Created audio player for: \(object.label) at (\(String(format: "%.2f", object.worldPosition.x)), \(String(format: "%.2f", object.worldPosition.y)), \(String(format: "%.2f", object.worldPosition.z)))")
+            print("✓ Created audio player for: \(object.label)")
+            print("  Object world position: (\(String(format: "%.2f", object.worldPosition.x)), \(String(format: "%.2f", object.worldPosition.y)), \(String(format: "%.2f", object.worldPosition.z)))")
         }
-        
+
         guard let player = player else { return }
-        
-        // Update 3D position
+
         let audioPosition = AVAudio3DPoint(x: object.worldPosition.x, y: object.worldPosition.y, z: object.worldPosition.z)
         player.position = audioPosition
+
+        // Log object position updates periodically
+        if debugCounter % 40 == 0 {
+            print("Object '\(object.label)' audio at: (\(String(format: "%.2f", audioPosition.x)), \(String(format: "%.2f", audioPosition.y)), \(String(format: "%.2f", audioPosition.z)))")
+        }
         
         // Update volume
         let clampedDistance = min(max(object.distance, minDistance), maxDistance)
@@ -180,23 +192,30 @@ class SpatialAudioManager: @unchecked Sendable {
         // Calculate frequency based on distance
         let clampedDistance = min(max(info.distance, minDistance), maxDistance)
         let normalizedDistance = (clampedDistance - minDistance) / (maxDistance - minDistance)
+
+        let minFreq: Float = 400.0
+        let maxFreq: Float = 1200.0
+        let frequency = minFreq + (normalizedDistance * (maxFreq - minFreq))
         
-        let minFreq: Float = 300.0  // Far away
-        let maxFreq: Float = 800.0  // Close
-        let frequency = maxFreq - (normalizedDistance * (maxFreq - minFreq))
-        
-        // Generate tone
-        let buffer = generateTone(frequency: Double(frequency), duration: 0.2, sampleRate: 44100.0)
-        
+        // Generate simple, clean beep
+        guard let buffer = generateTone(frequency: Double(frequency), duration: 0.15, sampleRate: 44100.0) else {
+            print("ERROR: Failed to generate tone, retrying in 0.5 seconds")
+            // Retry after delay if buffer generation fails
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.scheduleNextBeep(for: objectId)
+            }
+            return
+        }
+
         player.scheduleBuffer(buffer, at: nil, options: []) { [weak self] in
             guard let self = self else { return }
-            
-            // Wait 2 seconds between beeps
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+
+            // Wait 0.5 seconds between beeps
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.scheduleNextBeep(for: objectId)
             }
         }
-        
+
         if !player.isPlaying {
             player.play()
         }
@@ -208,16 +227,22 @@ class SpatialAudioManager: @unchecked Sendable {
               isEngineRunning else {
             return nil
         }
-        
+
         let player = AVAudioPlayerNode()
-        
+
         engine.attach(player)
-        
+
         let format = player.outputFormat(forBus: 0)
         engine.connect(player, to: environment, format: format)
-        
+
+        // Enable spatial audio on the player
         player.renderingAlgorithm = .HRTFHQ
-        player.position = AVAudio3DPoint(x: object.worldPosition.x, y: object.worldPosition.y, z: object.worldPosition.z)
+
+        // Set initial position using absolute world coordinates
+        let initialPos = AVAudio3DPoint(x: object.worldPosition.x, y: object.worldPosition.y, z: object.worldPosition.z)
+        player.position = initialPos
+
+        print("NEW PLAYER created at position: (\(String(format: "%.2f", initialPos.x)), \(String(format: "%.2f", initialPos.y)), \(String(format: "%.2f", initialPos.z)))")
         
         lock.lock()
         audioPlayers[object.id] = player
@@ -226,27 +251,44 @@ class SpatialAudioManager: @unchecked Sendable {
         return player
     }
     
-    private func generateTone(frequency: Double, duration: Double, sampleRate: Double) -> AVAudioPCMBuffer {
+    private func generateTone(frequency: Double, duration: Double, sampleRate: Double) -> AVAudioPCMBuffer? {
         let frameCount = UInt32(duration * sampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
-        
+
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
+            print("ERROR: Failed to create audio format")
+            return nil
+        }
+
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            fatalError("Failed to create audio buffer")
+            print("ERROR: Failed to create audio buffer")
+            return nil
         }
         
         buffer.frameLength = frameCount
-        
-        let amplitude: Float = 0.3
+
+        let amplitude: Float = 0.25
         let omega = 2.0 * Double.pi * frequency / sampleRate
-        
+
+        // Create smooth envelope for clean beep
         for frame in 0..<Int(frameCount) {
             let t = Double(frame) / sampleRate
-            let fadeIn = min(1.0, t * 5.0)
-            let fadeOut = min(1.0, (duration - t) * 5.0)
-            let envelope = Float(fadeIn * fadeOut)
-            
+            let normalizedT = t / duration
+
+            // Smooth attack and release envelope (bell curve)
+            let envelope: Float
+            if normalizedT < 0.1 {
+                // Fast attack
+                envelope = Float(normalizedT / 0.1)
+            } else if normalizedT > 0.8 {
+                // Smooth release
+                envelope = Float((1.0 - normalizedT) / 0.2)
+            } else {
+                // Sustain
+                envelope = 1.0
+            }
+
             let sample = Float(sin(omega * Double(frame))) * amplitude * envelope
-            
+
             buffer.floatChannelData?[0][frame] = sample
             buffer.floatChannelData?[1][frame] = sample
         }
@@ -273,27 +315,39 @@ class SpatialAudioManager: @unchecked Sendable {
         print("Removed audio player for object ID: \(id)")
     }
     
+    func restart() {
+        print("Restarting audio manager...")
+        stop()
+
+        // Small delay to ensure cleanup
+        Thread.sleep(forTimeInterval: 0.1)
+
+        setupAudioSession()
+        setupAudioEngine()
+        print("Audio manager restarted successfully")
+    }
+
     func stop() {
         lock.lock()
         let playerIds = Array(audioPlayers.keys)
         lock.unlock()
-        
+
         for id in playerIds {
             removeAudioPlayer(id: id)
         }
-        
+
         audioEngine?.stop()
         isEngineRunning = false
-        
+
         do {
             try AVAudioSession.sharedInstance().setActive(false)
         } catch {
             print("Failed to deactivate audio session: \(error)")
         }
-        
+
         print("Audio manager stopped")
     }
-    
+
     deinit {
         stop()
     }
