@@ -137,7 +137,7 @@ Entity created -> SpatialAudioComponent added
 
 **Why This Works:**
 - Audio attached directly to RealityKit Entity
-- RealityKit's SpatialAudioComponent uses system HRTF
+- RealityKit's `SpatialAudioComponent` uses system HRTF
 - Audio position updates automatically as entity moves
 - No manual position calculations needed
 
@@ -295,11 +295,22 @@ Spatial-Audio-Research-ARVR/
 - Consider audio priority system for multiple sources
 - May need spatial audio pooling for many objects
 
+## Development Notes
+
+### AI Usage in Development
+This project utilized AI assistance specifically for:
+- **Code review and debugging**: Identifying potential memory leaks, performance issues, and Swift/visionOS best practices
+- **Development assistance**: Guidance on ARKit anchor management, RealityKit spatial audio implementation, and async/await patterns in SwiftUI
+
+Key technical decisions, research methodology, system architecture, and all scientific aspects were developed independently. AI served as a development tool to improve code quality and resolve implementation challenges, particularly around the complex spatial audio positioning system and ARKit integration patterns.
+
 ## Credits
 
 **Developer:** Amelia Eckard
+**Contact:** aeckard3@charlotte.edu
 **Institution:** University of North Carolina at Charlotte
-**Project:** Vision Pro Research Study
+**Research Advisor:** Todd Dobbs
+**Project:** Vision Pro Spatial Audio Accessibility Research
 **Platform:** visionOS (Apple Vision Pro)
 **Updated:** January 2026
 

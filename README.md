@@ -26,3 +26,25 @@ How do computer vision-driven spatial audio cues using the Apple Vision Pro affe
 - **Frameworks**: ARKit, RealityKit, SwiftUI
 - **Language**: Swift
 - **Audio**: Spatial Audio APIs
+
+## Documentation
+
+- [Technical Documentation](DOCUMENTATION.md) — Architecture, components, and implementation details
+- [Research Protocol](Documentation/ResearchProtocol.md) — Study design and research objectives
+- [Technical Specifications](Documentation/TechnicalSpecs.md) — Detailed system specs
+- [Update Log](Documentation/UpdateLog.md) — Changelog and revision history
+
+## AI Usage Disclosure
+
+This project utilized AI assistance for development support and code review. Specifically:
+- **Code review and debugging**: AI helped identify potential issues and suggest improvements in Swift/visionOS implementation
+- **Development assistance**: AI provided guidance on ARKit/RealityKit best practices and spatial audio implementation patterns
+
+All research design, methodology, core algorithms, and scientific conclusions remain entirely human-driven. AI was used as a development tool, similar to documentation or Stack Overflow, to enhance code quality and accelerate implementation.
+
+## Contact
+
+**Developer:** Amelia Eckard
+**Email:** aeckard3@charlotte.edu
+**Research Advisor:** Todd Dobbs
+**Institution:** University of North Carolina at Charlotte
