@@ -218,6 +218,7 @@ Spatial-Audio-Research-ARVR/
 │   └── Box.referenceobject         # ARKit reference object file
 └── Spatial_Audio_Research_ARVRApp.swift  # App entry point
 ```
+*AI used to create chart.*
 
 ## Dependencies
 
@@ -301,8 +302,6 @@ Spatial-Audio-Research-ARVR/
 This project utilized AI assistance specifically for:
 - **Code review and debugging**: Identifying potential memory leaks, performance issues, and Swift/visionOS best practices
 - **Development assistance**: Guidance on ARKit anchor management, RealityKit spatial audio implementation, and async/await patterns in SwiftUI
-
-Key technical decisions, research methodology, system architecture, and all scientific aspects were developed independently. AI served as a development tool to improve code quality and resolve implementation challenges, particularly around the complex spatial audio positioning system and ARKit integration patterns.
 
 ## Credits
 
