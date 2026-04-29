@@ -8,9 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		87EAFAE32EA1BBA900ACA57A /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 87EAFAE22EA1BBA900ACA57A /* RealityKitContent */; };
-		87EAFB412EA1D92100ACA57A /* UpdateLog.md in Resources */ = {isa = PBXBuildFile; fileRef = 87EAFB3F2EA1D92100ACA57A /* UpdateLog.md */; };
-		87EAFB422EA1D92100ACA57A /* ResearchProtocol.md in Resources */ = {isa = PBXBuildFile; fileRef = 87EAFB3D2EA1D92100ACA57A /* ResearchProtocol.md */; };
-		87EAFB432EA1D92100ACA57A /* TechnicalSpecs.md in Resources */ = {isa = PBXBuildFile; fileRef = 87EAFB3E2EA1D92100ACA57A /* TechnicalSpecs.md */; };
 		87EAFB452EA1D93200ACA57A /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 87EAFB442EA1D93200ACA57A /* README.md */; };
 /* End PBXBuildFile section */
 
@@ -158,10 +155,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				87EAFB412EA1D92100ACA57A /* UpdateLog.md in Resources */,
-				87EAFB422EA1D92100ACA57A /* ResearchProtocol.md in Resources */,
 				87EAFB452EA1D93200ACA57A /* README.md in Resources */,
-				87EAFB432EA1D92100ACA57A /* TechnicalSpecs.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
