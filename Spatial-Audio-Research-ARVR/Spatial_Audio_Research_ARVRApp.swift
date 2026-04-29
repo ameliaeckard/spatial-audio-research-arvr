@@ -1,9 +1,11 @@
 //
 //  Spatial_Audio_Research_ARVRApp.swift
 //  Spatial-Audio-Research-ARVR
-//  FIXED - Added separate control panel for Live Detection
+//  Updated by Amelia Eckard on 4/29/26.
 //
-//  Holds the main app structure and windows using SwiftUI.
+//  Simplified to a single main window + the immersive space.
+//  The main menu window morphs between menu / loading / live-controls states,
+//  so the separate control-panel and research-testing windows are no longer needed.
 //
 
 import SwiftUI
@@ -11,7 +13,7 @@ import SwiftUI
 @main
 struct SpatialAudioApp: App {
     @State private var appModel = AppModel()
-    
+
     var body: some Scene {
         WindowGroup("Main Menu", id: "main-menu") {
             MainMenuView()
@@ -19,7 +21,7 @@ struct SpatialAudioApp: App {
         }
         .defaultSize(width: 800, height: 600)
         .windowResizability(.contentSize)
-        
+
         ImmersiveSpace(id: "live-detection") {
             LiveDetectionImmersiveView()
                 .environment(appModel)
@@ -31,25 +33,5 @@ struct SpatialAudioApp: App {
                 }
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
-        
-        WindowGroup("Live Detection Controls", id: "live-detection-controls") {
-            LiveDetectionControlPanel()
-                .environment(appModel)
-        }
-        .defaultSize(width: 600, height: 700)
-        .windowResizability(.contentSize)
-        .defaultWindowPlacement { content, context in
-            return WindowPlacement(.utilityPanel)
-        }
-        
-        WindowGroup("Research Testing", id: "research-testing") {
-            ResearchTestingView()
-                .environment(appModel)
-        }
-        .defaultSize(width: 800, height: 600)
-        .windowResizability(.contentSize)
-        .defaultWindowPlacement { content, context in
-            return WindowPlacement(.utilityPanel)
-        }
     }
 }
