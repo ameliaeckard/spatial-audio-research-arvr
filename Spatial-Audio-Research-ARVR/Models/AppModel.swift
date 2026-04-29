@@ -117,7 +117,6 @@ class AppModel {
     
     func queryWorldSensingAuthorization() async {
         let authorizationQuery = await arkitSession.queryAuthorization(for: [.worldSensing])
-        
         if let worldSensingResult = authorizationQuery[.worldSensing] {
             worldSensingAuthorizationStatus = worldSensingResult
         }
@@ -125,7 +124,6 @@ class AppModel {
     
     func requestWorldSensingAuthorization() async {
         let authorizationRequest = await arkitSession.requestAuthorization(for: [.worldSensing])
-        
         if let worldSensingResult = authorizationRequest[.worldSensing] {
             worldSensingAuthorizationStatus = worldSensingResult
         }
@@ -167,13 +165,8 @@ class AppModel {
         print("Object tracking active")
         isTracking = true
         
-        Task {
-            await processObjectUpdates()
-        }
-        
-        Task {
-            await updateListenerPositionLoop()
-        }
+        Task { await processObjectUpdates() }
+        Task { await updateListenerPositionLoop() }
     }
     
     private func processObjectUpdates() async {
@@ -194,7 +187,6 @@ class AppModel {
                 print("Object detected: \(objectName)")
 
                 if let existingViz = currentVisualization {
-                    print("Updating existing visualization instead of recreating")
                     existingViz.update(with: anchor)
                 } else {
                     let visualization = ObjectAnchorVisualization(for: anchor)
@@ -206,6 +198,7 @@ class AppModel {
                 updateTrackedObjectsList()
                 
             case .updated:
+                // Pass full anchor so visualization can check isTracked and show/hide itself
                 currentVisualization?.update(with: anchor)
                 updateTrackedObjectsList()
                 
@@ -243,20 +236,14 @@ class AppModel {
                 transform.columns.3.z
             )
 
-            // Push updated distance + listener position into the visualization
-            // so audio frequency and metrics label stay current
             if let viz = currentVisualization {
                 let objPos = viz.position
                 let distance = simd_distance(objPos, listenerPos)
                 viz.updateMetrics(distance: distance, listenerWorldPosition: listenerPos)
             }
 
-            // Debug logging every 2 seconds
             if debugCounter % 40 == 0 && !trackedObjects.isEmpty {
-                print("Listener (head) position: (\(String(format: "%.2f", listenerPos.x)), \(String(format: "%.2f", listenerPos.y)), \(String(format: "%.2f", listenerPos.z)))")
-                for obj in trackedObjects {
-                    print("   Object '\(obj.label)' at: (\(String(format: "%.2f", obj.worldPosition.x)), \(String(format: "%.2f", obj.worldPosition.y)), \(String(format: "%.2f", obj.worldPosition.z))) - Distance: \(String(format: "%.2f", obj.distance))m")
-                }
+                print("Listener position: (\(String(format: "%.2f", listenerPos.x)), \(String(format: "%.2f", listenerPos.y)), \(String(format: "%.2f", listenerPos.z)))")
             }
             debugCounter += 1
 
@@ -265,7 +252,8 @@ class AppModel {
     }
     
     private func updateTrackedObjectsList() {
-        guard let viz = currentVisualization else {
+        guard let viz = currentVisualization, viz.isVisible else {
+            // Either no visualization or the anchor is not currently tracked — clear list
             trackedObjects.removeAll()
             updateDetectionStatus()
             updateBoundingBoxes()
@@ -305,10 +293,7 @@ class AppModel {
     }
     
     private func updateBoundingBoxes() {
-        // BoundingBoxEntity is now redundant since ObjectAnchorVisualization
-        // renders its own accurate wireframe. Clear any leftover boxes.
         guard let rootEntity = rootEntity else { return }
-
         for (_, box) in boundingBoxes {
             box.removeFromParent()
         }
@@ -355,27 +340,29 @@ class ObjectAnchorVisualization {
     var position: SIMD3<Float>
     let detectedObjectId: UUID
 
-    // Distance-driven audio constants — far = HIGH pitch, close = LOW pitch
+    // MARK: Doppler-style audio: close = HIGH pitch, far = LOW pitch
+    // This mirrors the Doppler effect — an approaching source compresses
+    // waves (higher frequency), a receding source stretches them (lower).
     static let minDistance: Float   = 0.3
     static let maxDistance: Float   = 10.0
-    static let minFrequency: Double = 300.0
-    static let maxFrequency: Double = 1200.0
+    static let minFrequency: Double = 300.0   // far away
+    static let maxFrequency: Double = 1200.0  // up close
 
-    private(set) var currentDistance: Float  = 0
-    private(set) var currentFrequency: Double = 300.0
+    private(set) var currentDistance: Float   = 0
+    private(set) var currentFrequency: Double = 1200.0
 
-    // Entity-based audio so RealityKit handles 3D positioning automatically
+    // Whether the wireframe should be visible (anchor is actively tracked)
+    private(set) var isVisible: Bool = true
+
+    private var wireframeRoot: Entity?
+
     private var audioPlaybackController: AudioPlaybackController?
     private var beepTimer: Timer?
 
-    // Cached audio resources keyed by frequency bucket (avoids regenerating every beep)
     private static var audioCache: [Int: AudioFileResource] = [:]
-    private static let cacheBucketSize: Double = 50.0  // Hz per bucket
+    private static let cacheBucketSize: Double = 50.0
 
-    // Floating metrics label shown above the box
     private var metricsLabelRoot: Entity?
-
-    // Store extent so the label offset stays correct after updates
     private var boxExtent: SIMD3<Float> = .zero
     private var boxCenter: SIMD3<Float> = .zero
 
@@ -391,31 +378,26 @@ class ObjectAnchorVisualization {
 
         entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
 
-        // anchor.boundingBox.center is the offset from the anchor origin to the box centre
-        // anchor.boundingBox.extent is the full width/height/depth
-        let bbox   = anchor.boundingBox
-        boxExtent  = bbox.extent
-        boxCenter  = bbox.center
+        let bbox  = anchor.boundingBox
+        boxExtent = bbox.extent
+        boxCenter = bbox.center
 
         buildWireframeBox(extent: boxExtent, center: boxCenter)
         buildMetricsLabel(extent: boxExtent, center: boxCenter)
 
-        // Attach SpatialAudioComponent so RealityKit positions the sound at the entity
         entity.components.set(SpatialAudioComponent())
 
-        // Kick off the beep loop
         scheduleNextBeep()
     }
 
     // MARK: - Wireframe
 
     private func buildWireframeBox(extent: SIMD3<Float>, center: SIMD3<Float>) {
-        // Wrapper positioned at the bounding box centre offset
         let boxRoot = Entity()
         boxRoot.position = center
         entity.addChild(boxRoot)
+        wireframeRoot = boxRoot
 
-        // UnlitMaterial requires explicit blending to be truly transparent
         let fillMesh = MeshResource.generateBox(size: extent)
         var fillMat  = UnlitMaterial()
         fillMat.color    = .init(tint: .white.withAlphaComponent(0.0))
@@ -423,7 +405,6 @@ class ObjectAnchorVisualization {
         let fillEntity = ModelEntity(mesh: fillMesh, materials: [fillMat])
         boxRoot.addChild(fillEntity)
 
-        // 12-edge wireframe from thin box prisms
         let t: Float = 0.003
         let (w, h, d) = (extent.x, extent.y, extent.z)
 
@@ -452,11 +433,49 @@ class ObjectAnchorVisualization {
         }
     }
 
+    // MARK: - Show / Hide wireframe based on anchor confidence
+
+    /// Called from processObjectUpdates on every `.updated` event.
+    /// Hides the wireframe (and silences audio) when the anchor is not
+    /// actively tracked, shows it again as soon as tracking resumes.
+    func update(with anchor: ObjectAnchor) {
+        entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
+        self.position = SIMD3<Float>(
+            anchor.originFromAnchorTransform.columns.3.x,
+            anchor.originFromAnchorTransform.columns.3.y,
+            anchor.originFromAnchorTransform.columns.3.z
+        )
+
+        let tracked = anchor.isTracked
+        setVisible(tracked)
+    }
+
+    private func setVisible(_ visible: Bool) {
+        guard visible != isVisible else { return }
+        isVisible = visible
+
+        // Show or hide the entire wireframe + label hierarchy
+        wireframeRoot?.isEnabled  = visible
+        metricsLabelRoot?.isEnabled = visible
+
+        if !visible {
+            // Silence audio immediately when object is lost
+            beepTimer?.invalidate()
+            beepTimer = nil
+            audioPlaybackController?.stop()
+            audioPlaybackController = nil
+            print("Wireframe hidden — object not currently tracked")
+        } else {
+            // Resume beeping when tracking resumes
+            scheduleNextBeep()
+            print("Wireframe shown — tracking resumed")
+        }
+    }
+
     // MARK: - Metrics label
 
     private func buildMetricsLabel(extent: SIMD3<Float>, center: SIMD3<Float>) {
         let root = Entity()
-        // Position above the top face: center.y + half-height + small gap
         root.position = SIMD3<Float>(center.x, center.y + extent.y / 2 + 0.06, center.z)
         entity.addChild(root)
         metricsLabelRoot = root
@@ -470,11 +489,10 @@ class ObjectAnchorVisualization {
         let lines: [String] = [
             label,
             String(format: "Dist: %.2f m",  currentDistance),
-            String(format: "Freq: %.0f Hz", currentFrequency),
-            String(format: "Pitch: %.0f Hz", currentFrequency)
+            String(format: "Freq: %.0f Hz", currentFrequency)
         ]
 
-        let fontSize:   CGFloat = 0.012   // small — readable up close, not overwhelming
+        let fontSize:   CGFloat = 0.012
         let lineHeight: Float   = 0.016
         var yOffset: Float = 0
 
@@ -501,20 +519,27 @@ class ObjectAnchorVisualization {
         }
     }
 
-    // MARK: - Audio (entity-based — RealityKit positions it in 3D automatically)
+    // MARK: - Audio (Doppler pitch: close = high frequency, far = low frequency)
 
+    /// Maps distance to frequency using an inverted curve:
+    /// at minDistance → maxFrequency (high pitch, object is close / "approaching")
+    /// at maxDistance → minFrequency (low pitch, object is far / "receding")
     private func frequencyForDistance(_ distance: Float) -> Double {
         let clamped    = min(max(distance, Self.minDistance), Self.maxDistance)
+        // normalised goes 0 (close) → 1 (far)
         let normalised = Double((clamped - Self.minDistance) / (Self.maxDistance - Self.minDistance))
-        return Self.minFrequency + normalised * (Self.maxFrequency - Self.minFrequency)
+        // Invert: close = high, far = low
+        return Self.maxFrequency - normalised * (Self.maxFrequency - Self.minFrequency)
     }
 
     private func scheduleNextBeep() {
-        let freq    = frequencyForDistance(currentDistance)
+        guard isVisible else { return }
+
+        let freq = frequencyForDistance(currentDistance)
         currentFrequency = freq
 
         Task { @MainActor [weak self] in
-            guard let self = self else { return }
+            guard let self = self, self.isVisible else { return }
             do {
                 let resource = try await self.audioResource(for: freq)
                 self.audioPlaybackController = self.entity.playAudio(resource)
@@ -522,14 +547,12 @@ class ObjectAnchorVisualization {
                 print("Beep audio error: \(error)")
             }
 
-            // 0.25 s gap between beeps — faster cadence than before
             self.beepTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
                 self?.scheduleNextBeep()
             }
         }
     }
 
-    /// Returns a cached AudioFileResource for the given frequency, generating it if needed.
     private func audioResource(for frequency: Double) async throws -> AudioFileResource {
         let bucket = Int(frequency / Self.cacheBucketSize) * Int(Self.cacheBucketSize)
 
@@ -545,7 +568,7 @@ class ObjectAnchorVisualization {
 
     private func generateToneFile(frequency: Double) throws -> URL {
         let sampleRate = 44100.0
-        let duration   = 0.12        // slightly shorter beep for snappier feel
+        let duration   = 0.12
         let frameCount = UInt32(duration * sampleRate)
 
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1),
@@ -577,18 +600,8 @@ class ObjectAnchorVisualization {
         return url
     }
 
-    // MARK: - Update
+    // MARK: - Metrics update (called ~50ms from AppModel)
 
-    func update(with anchor: ObjectAnchor) {
-        entity.transform = Transform(matrix: anchor.originFromAnchorTransform)
-        self.position = SIMD3<Float>(
-            anchor.originFromAnchorTransform.columns.3.x,
-            anchor.originFromAnchorTransform.columns.3.y,
-            anchor.originFromAnchorTransform.columns.3.z
-        )
-    }
-
-    /// Called every ~50 ms from AppModel's listener loop
     func updateMetrics(distance: Float, listenerWorldPosition: SIMD3<Float>) {
         currentDistance = distance
         refreshMetricsText()

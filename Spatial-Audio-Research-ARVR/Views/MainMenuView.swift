@@ -134,60 +134,54 @@ struct MainMenuView: View {
     // MARK: - Live Controls
 
     private var liveControlsContent: some View {
-        VStack(spacing: 28) {
-            // Header
-            VStack(spacing: 12) {
+        VStack(spacing: 0) {
+            // Header row — title + status inline to save vertical space
+            HStack(alignment: .center) {
                 Text("Live Detection")
-                    .font(.largeTitle)
+                    .font(.title)
                     .fontWeight(.bold)
 
-                if let object = appModel.selectedObject {
-                    HStack(spacing: 8) {
-                        Text("Detecting:")
-                            .font(.title3)
+                Spacer()
 
-                        Text(object.rawValue)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(object.color)
-
-                        if appModel.detectedObjects[object] == true {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.title3)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-
-                // Tracking status indicator
                 if appModel.isReadyToRun {
                     HStack(spacing: 6) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 8, height: 8)
-                        Text("Tracking Active")
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                        Circle().fill(.green).frame(width: 8, height: 8)
+                        Text("Tracking Active").font(.caption).foregroundStyle(.green)
                     }
                 } else {
                     HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text("Initializing ARKit...")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                        ProgressView().scaleEffect(0.7)
+                        Text("Initializing ARKit…").font(.caption).foregroundStyle(.orange)
                     }
                 }
             }
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
 
-            Divider()
+            // Detecting badge — only shown when an object is selected
+            if let object = appModel.selectedObject {
+                HStack(spacing: 8) {
+                    Text("Detecting:")
+                    Text(object.rawValue)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(object.color)
+                    if appModel.detectedObjects[object] == true {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    }
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(.regularMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.bottom, 10)
+            }
+
+            Divider().padding(.horizontal, 32)
 
             // Object selection
-            VStack(spacing: 16) {
+            VStack(spacing: 10) {
                 Text("Select Object to Detect")
                     .font(.headline)
 
@@ -196,28 +190,23 @@ struct MainMenuView: View {
                         Button {
                             toggleObjectSelection(object)
                         } label: {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 6) {
                                 ZStack {
                                     Circle()
                                         .fill(appModel.selectedObject == object
-                                              ? object.color.opacity(0.2)
-                                              : Color.clear)
-                                        .frame(width: 80, height: 80)
-
+                                              ? object.color.opacity(0.2) : Color.clear)
+                                        .frame(width: 64, height: 64)
                                     Image(systemName: object.icon)
-                                        .font(.system(size: 30))
+                                        .font(.system(size: 26))
                                         .foregroundStyle(appModel.selectedObject == object
-                                                         ? object.color
-                                                         : .primary)
-
+                                                         ? object.color : .primary)
                                     if appModel.detectedObjects[object] == true {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.green)
-                                            .font(.system(size: 20))
-                                            .offset(x: 25, y: -25)
+                                            .font(.system(size: 16))
+                                            .offset(x: 20, y: -20)
                                     }
                                 }
-
                                 Text(object.rawValue)
                                     .font(.caption)
                                     .fontWeight(appModel.selectedObject == object ? .semibold : .regular)
@@ -227,43 +216,38 @@ struct MainMenuView: View {
                     }
                 }
             }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 14)
 
-            Divider()
+            Divider().padding(.horizontal, 32)
 
             // Detected objects list
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Detected Objects")
                     .font(.headline)
 
                 if appModel.trackedObjects.isEmpty {
-                    Text("No objects detected yet — point the Vision Pro at your target")
+                    Text("No objects detected — point the Vision Pro at your target")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ForEach(appModel.trackedObjects.prefix(5)) { object in
+                    ForEach(appModel.trackedObjects.prefix(4)) { object in
                         HStack(spacing: 8) {
-                            Circle()
-                                .fill(.green)
-                                .frame(width: 6, height: 6)
-
-                            Text(object.label)
-                                .font(.caption)
-
+                            Circle().fill(.green).frame(width: 6, height: 6)
+                            Text(object.label).font(.caption)
                             Spacer()
-
                             Text(String(format: "%.1fm", object.distance))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-
+                                .font(.caption2).foregroundStyle(.secondary)
                             Text(String(format: "%.0f%%", object.confidence * 100))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 14)
 
             Spacer()
 
@@ -275,17 +259,20 @@ struct MainMenuView: View {
                     Image(systemName: "xmark.circle.fill")
                     Text("Exit Live Detection")
                 }
-                .font(.title3)
-                .padding()
+                .font(.body)
+                .padding(.vertical, 12)
                 .frame(maxWidth: .infinity)
                 .background(.red.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 12)
 
             footerView
+                .padding(.bottom, 16)
         }
-        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Footer
