@@ -1,5 +1,7 @@
 # Spatial Audio Navigation _(spatial-audio-research-arvr)_
 
+Lab report: [Spatial Audio Navigation](https://lab.ameliaeckard.com/notes/2025-08-01-spatial-audio-accessible-navigation)
+
 An Apple Vision Pro research prototype using object tracking and spatial audio for accessible indoor navigation.
 
 ## Background
@@ -48,7 +50,3 @@ Demo: [Spatial Audio Object Detection](https://www.youtube.com/watch?v=tMCRBuLIV
 ## Contributing
 
 Issues are welcome for bugs or documentation problems. Please open an issue before a substantial pull request.
-
-## License
-
-UNLICENSED © Amelia Eckard.
